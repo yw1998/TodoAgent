@@ -45,20 +45,21 @@ async def feishu_events(request: Request):
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="invalid event payload")
 
-    if payload.get("type") == "url_verification":
-        await _verify_token(payload.get("token", ""))
-        return {"challenge": payload.get("challenge", "")}
-
     if "encrypt" in payload:
         async with SessionLocal() as session:
             encrypt_key = await setting_service.get_setting(session, "feishu_encrypt_key")
         if not encrypt_key:
-            raise HTTPException(status_code=400, detail="encrypt_key not configured")
+            raise HTTPException(status_code=400,
+                                detail="payload encrypted: set feishu_encrypt_key in .env or admin settings")
         from app.channels.feishu import decrypt_event
         try:
             payload = decrypt_event(payload["encrypt"], encrypt_key)
         except Exception:
-            raise HTTPException(status_code=400, detail="decrypt failed")
+            raise HTTPException(status_code=400, detail="decrypt failed (wrong encrypt_key?)")
+
+    if payload.get("type") == "url_verification":
+        await _verify_token(payload.get("token", ""))
+        return {"challenge": payload.get("challenge", "")}
 
     header = payload.get("header", {})
     if header.get("event_type") != "im.message.receive_v1":

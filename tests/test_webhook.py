@@ -2,11 +2,20 @@ import httpx
 import pytest
 
 from app.api import webhook
+from app.db.models import Setting
 from app.main import app
+from app.services import setting_service
 
 
 @pytest.fixture
-async def client():
+async def client(session):
+    for k in ("feishu_encrypt_key", "feishu_verification_token"):
+        row = await session.get(Setting, k)
+        if row:
+            await session.delete(row)
+    await session.commit()
+    setting_service.invalidate()
+
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
         yield c
