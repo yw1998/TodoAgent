@@ -148,10 +148,25 @@ async def users_page(request: Request, session: AsyncSession = Depends(get_sessi
 
 
 @router.get("/logs", response_class=HTMLResponse)
-async def logs_page(request: Request, page: int = 1, session: AsyncSession = Depends(get_session)):
+async def logs_page(request: Request, page: int = 1, user_id: int | None = None,
+                    direction: str | None = None, status: str | None = None,
+                    q: str | None = None, session: AsyncSession = Depends(get_session)):
     if redirect := await require_page(request):
         return redirect
-    rows = (await session.execute(
-        select(MessageLog).order_by(MessageLog.id.desc()).offset((page - 1) * 30).limit(30)
-    )).scalars().all()
-    return templates.TemplateResponse(request, "logs.html", {"logs": rows, "page": page})
+    sq = (select(MessageLog, User)
+          .outerjoin(User, MessageLog.user_id == User.id)
+          .order_by(MessageLog.id.desc()))
+    if user_id:
+        sq = sq.where(MessageLog.user_id == user_id)
+    if direction in ("in", "out"):
+        sq = sq.where(MessageLog.direction == direction)
+    if status in ("ok", "error"):
+        sq = sq.where(MessageLog.status == status)
+    if q:
+        sq = sq.where(MessageLog.content.contains(q))
+    rows = (await session.execute(sq.offset((page - 1) * 30).limit(30))).all()
+    users = (await session.execute(select(User).order_by(User.id))).scalars().all()
+    return templates.TemplateResponse(request, "logs.html", {
+        "rows": rows, "users": users, "page": page,
+        "f_user": user_id, "f_dir": direction or "", "f_status": status or "", "f_q": q or "",
+    })

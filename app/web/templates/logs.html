@@ -1,28 +1,77 @@
 {% extends "base.html" %}
 {% block content %}
+<style>
+  details summary { cursor: pointer; color: var(--muted); }
+  details summary:hover { color: var(--text); }
+  .tool { margin: 6px 0; padding: 8px 10px; background: #fbfcfd; border: 1px solid var(--line-soft); border-radius: 6px; }
+  .tool b { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  .tool .result-ok { color: #1a7f37; }
+  .tool .result-bad { color: #cf222e; }
+  .full { white-space: pre-wrap; word-break: break-all; margin: 6px 0; }
+  .dir-in { color: var(--blue); }
+  .dir-out { color: #1a7f37; }
+  .arrow { font-family: monospace; }
+</style>
 <h1 class="page">消息日志</h1>
+
+<form class="filters" method="get">
+  <select name="user_id">
+    <option value="">全部用户</option>
+    {% for u in users %}<option value="{{ u.id }}" {{ 'selected' if f_user==u.id }}>{{ u.name or u.external_id }}</option>{% endfor %}
+  </select>
+  <select name="direction">
+    <option value="">收+发</option>
+    <option value="in" {{ 'selected' if f_dir=='in' }}>收到</option>
+    <option value="out" {{ 'selected' if f_dir=='out' }}>发出</option>
+  </select>
+  <select name="status">
+    <option value="">全部状态</option>
+    <option value="ok" {{ 'selected' if f_status=='ok' }}>ok</option>
+    <option value="error" {{ 'selected' if f_status=='error' }}>error</option>
+  </select>
+  <input name="q" placeholder="内容关键字" value="{{ f_q }}">
+  <button class="btn" type="submit">筛选</button>
+</form>
+
 <div class="panel">
 <table>
-  <thead><tr><th>ID</th><th>时间</th><th>用户</th><th>方向</th><th>内容</th><th>工具调用</th><th>状态</th><th>耗时</th></tr></thead>
+  <thead><tr><th>时间</th><th>用户</th><th>方向</th><th>内容 / 详情</th><th>状态</th><th>耗时</th></tr></thead>
   <tbody>
-  {% for m in logs %}
+  {% for m, u in rows %}
   <tr>
-    <td class="muted">{{ m.id }}</td>
     <td>{{ m.created_at | localmd }}</td>
-    <td>{{ m.user_id }}</td>
-    <td>{{ m.direction }}</td>
-    <td>{{ m.content[:120] }}{% if m.error %}<br><span class="tag error">{{ m.error[:80] }}</span>{% endif %}</td>
-    <td><small>{% if m.tool_calls %}<code>{{ m.tool_calls | tojson }}</code>{% endif %}</small></td>
+    <td>{{ u.name or u.external_id if u else '-' }}</td>
+    <td><span class="arrow {% if m.direction=='in' %}dir-in{% else %}dir-out{% endif %}">{{ '→ 收到' if m.direction=='in' else '← 回复' }}</span></td>
+    <td>
+      <details>
+        <summary>{{ m.content[:80] }}{% if m.content|length > 80 %}…{% endif %}</summary>
+        <div class="full">{{ m.content }}</div>
+        {% if m.error %}<div class="full tag error">{{ m.error }}</div>{% endif %}
+        {% for c in m.tool_calls or [] %}
+        <div class="tool">
+          <b>调用 {{ c.tool }}</b>
+          <small>入参 {{ c.args | tojson }}</small>
+          {% if c.result is mapping %}
+            <div class="{{ 'result-ok' if c.result.ok else 'result-bad' }}">{{ c.result | tojson }}</div>
+          {% else %}
+            <div>{{ c.result }}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </details>
+    </td>
     <td><span class="tag {{ 'ok' if m.status=='ok' else 'error' }}">{{ m.status }}</span></td>
     <td><small>{{ m.latency_ms }}ms</small></td>
   </tr>
-  {% else %}<tr><td colspan="8" class="empty">暂无日志</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="6" class="empty">暂无日志</td></tr>{% endfor %}
   </tbody>
 </table>
 </div>
+
+{% set qs = 'user_id='~(f_user or '')~'&direction='~f_dir~'&status='~f_status~'&q='~f_q %}
 <div class="pager">
-  {% if page > 1 %}<a href="?page={{ page-1 }}">上一页</a>{% endif %}
+  {% if page > 1 %}<a href="?page={{ page-1 }}&{{ qs }}">上一页</a>{% endif %}
   <span>第 {{ page }} 页</span>
-  {% if logs|length >= 30 %}<a href="?page={{ page+1 }}">下一页</a>{% endif %}
+  {% if rows|length >= 30 %}<a href="?page={{ page+1 }}&{{ qs }}">下一页</a>{% endif %}
 </div>
 {% endblock %}

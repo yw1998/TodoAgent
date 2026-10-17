@@ -39,3 +39,29 @@ async def test_pages_render(client):
         resp = await client.get(path)
         assert resp.status_code == 200, path
     assert "时区 Asia/Shanghai" in (await client.get("/admin/todos")).text
+
+
+async def test_logs_page_filters(client, session):
+    from app.db.models import MessageLog
+
+    user = await user_service.upsert_user(session, "feishu", "ou_log", "日志君", "oc_1")
+    session.add(MessageLog(user_id=user.id, direction="in", content="明天记得带伞",
+                           tool_calls=[{"tool": "create_todo", "args": {"title": "带伞"},
+                                        "result": {"ok": True, "todo_id": 42}}],
+                           status="ok", latency_ms=1234))
+    session.add(MessageLog(user_id=user.id, direction="out", content="已创建 ✅", status="ok"))
+    session.add(MessageLog(user_id=user.id, direction="in", content="boom", status="error",
+                           error="llm down"))
+    await session.commit()
+
+    page = (await client.get("/admin/logs")).text
+    assert "明天记得带伞" in page and "create_todo" in page and "日志君" in page
+
+    only_in = (await client.get("/admin/logs?direction=in")).text
+    assert "明天记得带伞" in only_in and "已创建" not in only_in
+
+    only_err = (await client.get("/admin/logs?status=error")).text
+    assert "boom" in only_err and "llm down" in only_err
+
+    searched = (await client.get("/admin/logs?q=带伞")).text
+    assert "明天记得带伞" in searched and "boom" not in searched
