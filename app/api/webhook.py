@@ -83,6 +83,15 @@ async def feishu_events(request: Request):
     header = payload.get("header", {})
     event_type = header.get("event_type", "")
     event_id = header.get("event_id", "")
+
+    if event_type == "card.action.trigger" or payload.get("type") == "action":
+        if header:
+            await _verify_token(header.get("token", ""))
+        from app.api.card_actions import handle_card_action
+        resp = await handle_card_action(payload)
+        logger.info("card action handled: toast=%r", resp.get("toast", {}).get("content", ""))
+        return resp
+
     if event_type != "im.message.receive_v1":
         logger.info("ignore event %s (type=%s)", event_id or "-", event_type or "-")
         return {"code": 0}

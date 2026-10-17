@@ -4,6 +4,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Todo, User
 
 
+async def find_user(session: AsyncSession, channel: str, external_id: str) -> User | None:
+    if not external_id:
+        return None
+    return (await session.execute(
+        select(User).where(User.channel == channel, User.external_id == external_id)
+    )).scalar_one_or_none()
+
+
 async def upsert_user(session: AsyncSession, channel: str, external_id: str,
                       name: str = "", chat_id: str = "") -> User:
     user = (await session.execute(

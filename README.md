@@ -32,6 +32,14 @@ uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
    订阅事件 `接收消息 im.message.receive_v1`。
 4. 将 Verification Token / Encrypt Key / App ID / App Secret 填入管理页「配置」或 .env。
 
+### 提醒卡片按钮
+
+到期提醒卡片自带「✅ 完成」「⏰ 延后30分钟」两个按钮，点击后飞书向同一回调地址
+发送卡片回调（旧版 `type=action` 或事件 `card.action.trigger`，二者均兼容），
+服务端同步执行并返回新卡片（状态更新、按钮消失）+ toast 提示；也可直接回复
+「完成」「延后10分钟」文字。若开发者控制台有独立的「卡片回调」订阅项，请确认
+回调地址与加密配置和事件订阅一致。
+
 ## 一键更新部署（服务器）
 
 ```bash

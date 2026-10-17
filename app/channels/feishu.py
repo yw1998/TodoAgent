@@ -58,16 +58,38 @@ class FeishuChannel(Channel):
         await self._send(session, user, "text", {"text": text})
 
     async def send_card(self, session, user: User, title: str, markdown: str,
-                        template: str = "blue") -> None:
-        await self._send(session, user, "interactive", build_card(title, markdown, template))
+                        template: str = "blue", extra_elements: list[dict] | None = None) -> None:
+        await self._send(session, user, "interactive",
+                         build_card(title, markdown, template, extra_elements))
+
+    async def send_card_message(self, session, user: User, card: dict) -> None:
+        await self._send(session, user, "interactive", card)
 
 
-def build_card(title: str, markdown: str, template: str = "blue") -> dict:
+def build_card(title: str, markdown: str, template: str = "blue",
+               extra_elements: list[dict] | None = None) -> dict:
     """飞书卡片：markdown 元素渲染 **加粗** 等语法；表格语法自动转原生 table 组件。"""
     return {
         "config": {"wide_title_mode": True, "update_multi": True},
         "header": {"title": {"tag": "plain_text", "content": title}, "template": template},
-        "elements": _card_elements(markdown),
+        "elements": _card_elements(markdown) + (extra_elements or []),
+    }
+
+
+def reminder_buttons(todo_id: int, snooze_minutes: int = 30) -> dict:
+    return {
+        "tag": "action",
+        "actions": [
+            {"tag": "button",
+             "text": {"tag": "plain_text", "content": f"✅ 完成"},
+             "type": "primary", "action_type": "request",
+             "value": {"act": "complete", "todo_id": str(todo_id)}},
+            {"tag": "button",
+             "text": {"tag": "plain_text", "content": f"⏰ 延后{snooze_minutes}分钟"},
+             "type": "default", "action_type": "request",
+             "value": {"act": "snooze", "todo_id": str(todo_id),
+                       "minutes": str(snooze_minutes)}},
+        ],
     }
 
 
