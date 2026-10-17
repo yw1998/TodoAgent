@@ -3,6 +3,7 @@
 import base64
 import hashlib
 import json
+import re
 import time
 
 import httpx
@@ -62,12 +63,56 @@ class FeishuChannel(Channel):
 
 
 def build_card(title: str, markdown: str, template: str = "blue") -> dict:
-    """飞书卡片：markdown 元素会渲染 **加粗** 等语法，避免纯文本显示星号。"""
+    """飞书卡片：markdown 元素渲染 **加粗** 等语法；表格语法自动转原生 table 组件。"""
     return {
         "config": {"wide_title_mode": True, "update_multi": True},
         "header": {"title": {"tag": "plain_text", "content": title}, "template": template},
-        "elements": [{"tag": "markdown", "content": markdown}],
+        "elements": _card_elements(markdown),
     }
+
+
+def _split_row(line: str) -> list[str]:
+    return [c.strip() for c in line.strip().strip("|").split("|")]
+
+
+def _is_table_sep(line: str) -> bool:
+    s = line.strip().strip("|")
+    return bool(s) and all(re.fullmatch(r":?-{2,}:?", c.strip()) for c in s.split("|") if c.strip() != "") \
+        and "-" in s
+
+
+def _card_elements(markdown: str) -> list[dict]:
+    """把 markdown 文本按表格分段：表格→原生 table，其余→markdown。"""
+    lines = markdown.splitlines()
+    elements, buf, i = [], [], 0
+    while i < len(lines):
+        line = lines[i]
+        if line.lstrip().startswith("|") and i + 1 < len(lines) and _is_table_sep(lines[i + 1]):
+            if buf:
+                elements.append({"tag": "markdown", "content": "\n".join(buf).strip()})
+                buf = []
+            header = _split_row(line)
+            i += 2
+            rows = []
+            while i < len(lines) and lines[i].lstrip().startswith("|"):
+                cells = _split_row(lines[i])
+                rows.append({f"c{j}": (cells[j] if j < len(cells) else "") for j in range(len(header))})
+                i += 1
+            elements.append({
+                "tag": "table",
+                "page_size": max(len(rows), 1),
+                "row_height": "low",
+                "header_info": True,
+                "columns": [{"name": f"c{j}", "display_name": h or "-", "width": "auto"}
+                            for j, h in enumerate(header)],
+                "rows": rows,
+            })
+            continue
+        buf.append(line)
+        i += 1
+    if buf:
+        elements.append({"tag": "markdown", "content": "\n".join(buf).strip()})
+    return elements or [{"tag": "markdown", "content": markdown}]
 
 
 def verify_signature(timestamp: str, nonce: str, body: bytes, signature: str, encrypt_key: str) -> bool:
