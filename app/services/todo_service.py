@@ -124,6 +124,6 @@ async def admin_query(session: AsyncSession, status: str | None = None,
         select(func.count()).select_from(sq.subquery())
     )).scalar_one()
     rows = (await session.execute(
-        sq.order_by(Todo.next_remind_at).offset((page - 1) * size).limit(size)
+        sq.order_by(Todo.id.desc()).offset((page - 1) * size).limit(size)
     )).scalars().all()
     return rows, total

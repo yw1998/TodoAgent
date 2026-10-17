@@ -9,8 +9,9 @@
   .tool .result-bad { color: #cf222e; }
   .full { white-space: pre-wrap; word-break: break-all; margin: 6px 0; }
   .dir-in { color: var(--blue); }
-  .dir-out { color: #1a7f37; }
+  .dir-out { color: var(--green, #1a7f37); }
   .arrow { font-family: monospace; }
+  th.col-dir, td.col-dir { width: 96px; min-width: 96px; white-space: nowrap; }
 </style>
 <h1 class="page">消息日志</h1>
 
@@ -31,12 +32,12 @@
 
 <div class="panel">
 <table>
-  <thead><tr><th>时间</th><th>方向</th><th>内容 / 详情</th><th>状态</th><th>耗时</th></tr></thead>
+  <thead><tr><th>时间</th><th class="col-dir">方向</th><th>内容 / 详情</th><th>状态</th><th>耗时</th></tr></thead>
   <tbody>
   {% for m in rows %}
   <tr>
     <td>{{ m.created_at | localmd }}</td>
-    <td><span class="arrow {% if m.direction=='in' %}dir-in{% else %}dir-out{% endif %}">{{ '→ 收到' if m.direction=='in' else '← 回复' }}</span></td>
+    <td class="col-dir"><span class="arrow {% if m.direction=='in' %}dir-in{% else %}dir-out{% endif %}">{{ '→ 收到' if m.direction=='in' else '← 回复' }}</span></td>
     <td>
       <details>
         <summary>{{ m.content[:80] }}{% if m.content|length > 80 %}…{% endif %}</summary>
