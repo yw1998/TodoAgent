@@ -5,7 +5,7 @@ services:
     container_name: todoagent
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "8008:8000"
     env_file:
       - path: .env
         required: false
