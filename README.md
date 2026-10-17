@@ -38,30 +38,6 @@ uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 uv run pytest -q
 ```
 
-## CI/CD 自动部署（GitHub Actions）
-
-push 到 `master` 后，Actions 会 SSH 到服务器执行 `git pull + docker compose up -d --build`，
-并对 `/healthz` 做部署后健康检查（失败则输出容器日志并置为失败）。
-
-**一次性配置**
-
-1. 服务器初始化（首次，以部署用户登录）：
-   ```bash
-   git clone https://github.com/yw1998/TodoAgent.git ~/TodoAgent
-   cd ~/TodoAgent && cp .env.example .env && vi .env   # 填入 LLM/飞书/SECRET_KEY
-   docker compose up -d
-   ```
-2. 将部署公钥加入服务器 `~/.ssh/authorized_keys`（公钥见仓库 Actions 配置文档或
-   `todoagent_deploy.pub`）。若仓库为私有，同一公钥也加为仓库 Deploy Key（勾选写权限不需要，只读即可）。
-3. 在 GitHub 仓库 Settings → Secrets and variables → Actions 添加：
-   - `DEPLOY_USER`：服务器 SSH 用户名
-   - `DEPLOY_KEY`：部署私钥内容（`-----BEGIN OPENSSH PRIVATE KEY-----` 开头的整段）
-
-主机 `119.91.64.47`、端口 `36666` 已写死在 `.github/workflows/deploy.yml`。
-
-> 注意：workflow 使用 `git reset --hard origin/master` 同步代码，服务器上 `~/TodoAgent`
-> 目录请勿手工改代码；配置一律放 `.env`（未被 git 跟踪，不受影响）。
-
 ## 消息示例
 
 | 你说 | 机器人做 |
