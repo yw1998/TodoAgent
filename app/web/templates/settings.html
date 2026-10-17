@@ -1,25 +1,27 @@
 {% extends "base.html" %}
 {% block content %}
 <h1 class="page">系统配置</h1>
-{% if saved %}<div class="card"><div class="body" style="color:var(--green);font-weight:600">配置已保存并即时生效 ✅</div></div>{% endif %}
+{% if saved %}<div class="panel"><div class="body note">配置已保存并即时生效</div></div>{% endif %}
 <form method="post" action="/admin/settings">
-<div class="card">
+<div class="panel">
   <div class="body">
-    <h3>留空或保持 *** 表示不修改；敏感项加密存储</h3>
+    <h3>留空或保持 *** 表示不修改，敏感项加密存储</h3>
     <table class="kv">
-      <thead><tr><th>Key</th><th>当前值 / 新值</th></tr></thead>
+      <thead><tr><th>键名</th><th>当前值 / 新值</th></tr></thead>
       <tbody>
       {% for i in items %}
       <tr>
-        <td>{{ i.key }}{% if i.is_secret %} 🔒{% endif %}</td>
+        <td>{{ i.key }}{% if i.is_secret %}（加密）{% endif %}</td>
         <td><input style="width:100%;max-width:460px" name="{{ i.key }}" type="{{ 'password' if i.is_secret else 'text' }}"
              value="{{ i.current if not i.is_secret else '' }}" placeholder="{{ i.current or '未设置' }}"></td>
       </tr>
       {% endfor %}
       </tbody>
     </table>
+    <div style="margin-top:14px">
+      <button class="btn btn-primary" type="submit">保存配置</button>
+    </div>
   </div>
 </div>
-<button class="btn" type="submit">保存配置</button>
 </form>
 {% endblock %}

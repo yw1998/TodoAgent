@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 {% block content %}
 <h1 class="page">用户</h1>
-<div class="card">
+<div class="panel">
 <table>
-  <thead><tr><th>#</th><th>渠道</th><th>外部ID</th><th>名称</th><th>会话</th><th>待提醒数</th></tr></thead>
+  <thead><tr><th>ID</th><th>渠道</th><th>外部 ID</th><th>名称</th><th>会话</th><th>待提醒</th></tr></thead>
   <tbody>
   {% for u, c in rows %}
-  <tr><td><span class="pill">{{ u.id }}</span></td><td><code>{{ u.channel }}</code></td>
+  <tr><td class="muted">{{ u.id }}</td><td>{{ u.channel }}</td>
       <td><small>{{ u.external_id }}</small></td>
       <td>{{ u.name }}</td><td><small>{{ u.chat_id }}</small></td>
-      <td>{% if c %}<span class="badge pending">{{ c }}</span>{% else %}<span class="badge cancelled">0</span>{% endif %}</td></tr>
-  {% else %}<tr><td colspan="6" style="text-align:center;color:var(--text-2);padding:32px">暂无用户</td></tr>{% endfor %}
+      <td>{{ c }}</td></tr>
+  {% else %}<tr><td colspan="6" class="empty">暂无用户</td></tr>{% endfor %}
   </tbody>
 </table>
 </div>
