@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<table>
+  <tr><th>#</th><th>渠道</th><th>外部ID</th><th>名称</th><th>会话</th><th>待提醒数</th></tr>
+  {% for u, c in rows %}
+  <tr><td>{{ u.id }}</td><td>{{ u.channel }}</td><td>{{ u.external_id }}</td>
+      <td>{{ u.name }}</td><td>{{ u.chat_id }}</td><td>{{ c }}</td></tr>
+  {% else %}<tr><td colspan="6">暂无用户</td></tr>{% endfor %}
+</table>
+{% endblock %}

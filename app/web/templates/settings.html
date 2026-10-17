@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+{% if saved %}<div class="card">配置已保存并即时生效 ✅</div>{% endif %}
+<form method="post" action="/admin/settings">
+<div class="card">
+  <h3>系统配置（留空或保持 *** 表示不修改）</h3>
+  <table class="kv">
+    <tr><th>Key</th><th>当前值 / 新值</th></tr>
+    {% for i in items %}
+    <tr>
+      <td>{{ i.key }}{% if i.is_secret %} 🔒{% endif %}</td>
+      <td><input name="{{ i.key }}" type="{{ 'password' if i.is_secret else 'text' }}"
+           value="{{ i.current if not i.is_secret else '' }}" placeholder="{{ i.current or '未设置' }}"></td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+<button type="submit">保存</button>
+</form>
+{% endblock %}

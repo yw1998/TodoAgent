@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<form class="filters" method="get">
+  <select name="status">
+    <option value="">全部状态</option>
+    {% for s in ['pending','done','cancelled'] %}
+    <option value="{{ s }}" {{ 'selected' if f_status==s }}>{{ s }}</option>
+    {% endfor %}
+  </select>
+  <select name="user_id">
+    <option value="">全部用户</option>
+    {% for u in users %}<option value="{{ u.id }}" {{ 'selected' if f_user==u.id }}>{{ u.name or u.external_id }}</option>{% endfor %}
+  </select>
+  <input name="q" placeholder="标题/备注关键字" value="{{ f_q }}">
+  <button type="submit">筛选</button>
+</form>
+
+<table>
+  <tr><th>#</th><th>用户</th><th>标题</th><th>下次提醒(UTC)</th><th>周期</th><th>状态</th><th>提醒次数</th><th>操作</th></tr>
+  {% for t in todos %}
+  <tr>
+    <td>{{ t.id }}</td>
+    <td>{{ t.user_id }}</td>
+    <td>{{ t.title }}{% if t.note %}<br><small>{{ t.note }}</small>{% endif %}</td>
+    <td>{{ t.next_remind_at.strftime('%Y-%m-%d %H:%M') }}</td>
+    <td><code>{{ t.repeat_cron or '-' }}</code></td>
+    <td><span class="badge {{ t.status }}">{{ t.status }}</span></td>
+    <td>{{ t.remind_count }}</td>
+    <td>
+      {% if t.status == 'pending' %}
+      <form method="post" action="/admin/todos/{{ t.id }}/action" style="display:inline">
+        <input type="hidden" name="action" value="done"><button>完成</button>
+      </form>
+      <form method="post" action="/admin/todos/{{ t.id }}/action" style="display:inline">
+        <input type="hidden" name="action" value="cancel"><button>取消</button>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="8">暂无数据</td></tr>
+  {% endfor %}
+</table>
+<p>
+  {% if page > 1 %}<a href="?page={{ page-1 }}&status={{ f_status }}&q={{ f_q }}">&laquo; 上一页</a>{% endif %}
+  第 {{ page }} 页
+  {% if todos|length >= 20 %}<a href="?page={{ page+1 }}&status={{ f_status }}&q={{ f_q }}">下一页 &raquo;</a>{% endif %}
+</p>
+{% endblock %}

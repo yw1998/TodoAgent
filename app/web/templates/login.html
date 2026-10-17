@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>登录 - TodoAgent</title>
+<style>
+ body{font-family:system-ui;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;background:#f5f6f8}
+ .box{background:#fff;padding:32px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.1);width:320px}
+ input{width:100%;padding:8px;margin:8px 0;border:1px solid #d1d5db;border-radius:6px;box-sizing:border-box}
+ button{width:100%;padding:8px;background:#2563eb;color:#fff;border:0;border-radius:6px;cursor:pointer}
+ .err{color:#b91c1c;font-size:13px}
+</style></head>
+<body>
+<form class="box" method="post" action="/admin/login">
+  <h3>TodoAgent 管理登录</h3>
+  {% if error %}<div class="err">{{ error }}</div>{% endif %}
+  <input name="username" placeholder="用户名" required>
+  <input name="password" type="password" placeholder="密码" required>
+  <button type="submit">登录</button>
+</form>
+</body>
+</html>

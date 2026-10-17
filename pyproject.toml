@@ -1,0 +1,33 @@
+[project]
+name = "todoagent"
+version = "0.1.0"
+description = "IM 消息驱动的智能待办机器人（飞书 + LLM Tool Calling）"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy[asyncio]>=2.0",
+    "aiosqlite>=0.20",
+    "apscheduler>=3.10,<4",
+    "openai>=1.40",
+    "httpx>=0.27",
+    "jinja2>=3.1",
+    "pydantic-settings>=2.3",
+    "pyjwt>=2.8",
+    "cryptography>=42",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "anyio"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<table>
+  <tr><th>#</th><th>时间(UTC)</th><th>用户</th><th>方向</th><th>内容</th><th>工具调用</th><th>状态</th><th>耗时</th></tr>
+  {% for m in logs %}
+  <tr>
+    <td>{{ m.id }}</td>
+    <td>{{ m.created_at.strftime('%m-%d %H:%M:%S') }}</td>
+    <td>{{ m.user_id }}</td>
+    <td>{{ m.direction }}</td>
+    <td>{{ m.content[:120] }}{% if m.error %}<br><span class="badge error">{{ m.error[:80] }}</span>{% endif %}</td>
+    <td><small>{% if m.tool_calls %}{{ m.tool_calls | tojson }}{% endif %}</small></td>
+    <td><span class="badge {{ 'done' if m.status=='ok' else 'error' }}">{{ m.status }}</span></td>
+    <td>{{ m.latency_ms }}ms</td>
+  </tr>
+  {% else %}<tr><td colspan="8">暂无日志</td></tr>{% endfor %}
+</table>
+<p>
+  {% if page > 1 %}<a href="?page={{ page-1 }}">&laquo;</a>{% endif %}
+  第 {{ page }} 页
+  {% if logs|length >= 30 %}<a href="?page={{ page+1 }}">&raquo;</a>{% endif %}
+</p>
+{% endblock %}
