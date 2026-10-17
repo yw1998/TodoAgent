@@ -1,7 +1,7 @@
 """LLM Tool schema 定义与 handler 注册表。"""
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from app.agent.prompts import SYSTEM_PROMPT  # noqa: F401  (service 侧引用)
 from app.config import get_env
@@ -86,8 +86,12 @@ TOOL_SCHEMAS = [
 ]
 
 
-def _fmt(dt: datetime) -> str:
-    return dt.strftime("%Y-%m-%d %H:%M")
+def _fmt(dt_utc) -> str:
+    """内部存 UTC naive，展示给 LLM/用户时转成配置时区。"""
+    from datetime import timezone
+    from zoneinfo import ZoneInfo
+    local = dt_utc.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(get_env().scheduler_timezone))
+    return local.strftime("%Y-%m-%d %H:%M")
 
 
 async def h_create(session, user, args: dict, source_text: str = "") -> dict:
@@ -156,7 +160,7 @@ def build_system_prompt(now_utc: datetime, pending: list[dict]) -> str:
     from zoneinfo import ZoneInfo
     env = get_env()
     local = now_utc.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(env.scheduler_timezone))
-    lines = [f"- #{p['id']} {p['title']} (下次提醒 {_fmt(p['remind_at'])} UTC)" for p in pending]
+    lines = [f"- #{p['id']} {p['title']} (下次提醒 {_fmt(p['remind_at'])})" for p in pending]
     return SYSTEM_PROMPT.format(
         now=local.strftime("%Y-%m-%d %H:%M"),
         tz=env.scheduler_timezone,

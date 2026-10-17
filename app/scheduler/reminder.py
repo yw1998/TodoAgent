@@ -29,6 +29,11 @@ def _to_aware(dt: datetime) -> datetime:
     return dt.replace(tzinfo=tz.utc)
 
 
+def fmt_local(dt_utc: datetime) -> str:
+    local = _to_aware(dt_utc).astimezone(ZoneInfo(_env.scheduler_timezone))
+    return f"{local:%Y-%m-%d %H:%M} ({_env.scheduler_timezone})"
+
+
 def next_cron_time(cron: str, base_utc: datetime) -> datetime:
     tzn = ZoneInfo(_env.scheduler_timezone)
     trigger = CronTrigger.from_crontab(cron, timezone=tzn)
@@ -100,10 +105,10 @@ async def fire_reminder(todo_id: int) -> None:
         await session.commit()
         logger.info("firing reminder todo#%s title=%r count=%d", todo_id, todo.title, todo.remind_count + 1)
 
-        text = (f"⏰ 提醒：{todo.title}\n"
-                f"时间：{todo.next_remind_at:%Y-%m-%d %H:%M} (UTC)\n"
-                f"回复「完成 #{todo.id}」标记已完成，回复「延后 {todo.id} 10分钟」稍后再提醒。")
-        await _send_with_retry(session, todo, text)
+        md = (f"**{todo.title}**\n"
+              f"提醒时间：{fmt_local(todo.next_remind_at)}\n"
+              f"回复「完成 #{todo.id}」标记已完成，回复「延后 #{todo.id} 10分钟」稍后再提醒。")
+        await _send_with_retry(session, todo, md)
 
         todo = await _load_todo(session, todo_id)
         if todo.repeat_cron:
@@ -114,14 +119,14 @@ async def fire_reminder(todo_id: int) -> None:
             await session.commit()
 
 
-async def _send_with_retry(session, todo: Todo, text: str) -> None:
+async def _send_with_retry(session, todo: Todo, markdown: str) -> None:
     from app.channels.feishu import feishu_channel
 
     max_retry = int(_env.scheduler_max_retry)
     delay = 2
     for attempt in range(max_retry + 1):
         try:
-            await feishu_channel.send_text(session, todo.user, text)
+            await feishu_channel.send_card(session, todo.user, "⏰ 待办提醒", markdown)
             session.add(ReminderLog(todo_id=todo.id, status="ok"))
             await session.commit()
             return

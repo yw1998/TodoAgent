@@ -38,7 +38,7 @@ class FeishuChannel(Channel):
         self._token_expire_at = time.time() + data.get("expire", 7200)
         return self._token
 
-    async def send_text(self, session, user: User, text: str) -> None:
+    async def _send(self, session, user: User, msg_type: str, content: dict) -> None:
         token = await self._get_token(session)
         receive_id_type = "chat_id" if user.chat_id.startswith("oc_") else "open_id"
         receive_id = user.chat_id or user.external_id
@@ -46,11 +46,28 @@ class FeishuChannel(Channel):
             resp = await client.post(
                 f"{BASE_URL}/open-apis/im/v1/messages?receive_id_type={receive_id_type}",
                 headers={"Authorization": f"Bearer {token}"},
-                json={"receive_id": receive_id, "msg_type": "text", "content": json.dumps({"text": text})},
+                json={"receive_id": receive_id, "msg_type": msg_type,
+                      "content": json.dumps(content, ensure_ascii=False)},
             )
             data = resp.json()
         if data.get("code") != 0:
             raise RuntimeError(f"feishu send error: {data}")
+
+    async def send_text(self, session, user: User, text: str) -> None:
+        await self._send(session, user, "text", {"text": text})
+
+    async def send_card(self, session, user: User, title: str, markdown: str,
+                        template: str = "blue") -> None:
+        await self._send(session, user, "interactive", build_card(title, markdown, template))
+
+
+def build_card(title: str, markdown: str, template: str = "blue") -> dict:
+    """飞书卡片：markdown 元素会渲染 **加粗** 等语法，避免纯文本显示星号。"""
+    return {
+        "config": {"wide_title_mode": True, "update_multi": True},
+        "header": {"title": {"tag": "plain_text", "content": title}, "template": template},
+        "elements": [{"tag": "markdown", "content": markdown}],
+    }
 
 
 def verify_signature(timestamp: str, nonce: str, body: bytes, signature: str, encrypt_key: str) -> bool:

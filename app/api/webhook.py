@@ -148,7 +148,7 @@ async def process_message(item: dict) -> None:
         session.add(MessageLog(user_id=user.id, direction="out", content=reply, status="ok"))
         await session.commit()
         try:
-            await feishu_channel.send_text(session, user, reply)
+            await feishu_channel.send_card(session, user, "📋 TodoAgent", reply)
             logger.info("replied to user=%s len=%d", item["open_id"], len(reply))
         except Exception:
             logger.exception("reply send failed: user=%s reply=%r",
