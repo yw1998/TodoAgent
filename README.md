@@ -8,8 +8,15 @@ IM 消息驱动的智能待办机器人：飞书发消息 → LLM Tool Calling �
 ## 快速开始
 
 ```bash
+cp .env.example .env                        # 填入 LLM 与飞书配置
+docker compose up -d                        # Docker 方式（推荐）
+```
+
+本地运行：
+
+```bash
 uv venv && uv pip install -e ".[dev]"    # 或 pip install -e .
-cp .env.example .env                      # 填入 LLM 与飞书配置
+cp .env.example .env
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
