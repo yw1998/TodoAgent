@@ -75,6 +75,34 @@ def _split_row(line: str) -> list[str]:
     return [c.strip() for c in line.strip().strip("|").split("|")]
 
 
+_FENCE_RE = re.compile(r"^\s*```[^\n]*$")
+
+
+def _normalize_markdown(md: str) -> str:
+    """飞书卡片 markdown 不支持围栏代码块与 `` 双反引号，转换为可行形式。"""
+    md = re.sub(r"``([^`\n]+?)``", r"`\1`", md)
+    out, fence = [], None
+    for line in md.splitlines():
+        is_fence = bool(_FENCE_RE.match(line))
+        if is_fence and fence is None:
+            fence = []
+            continue
+        if is_fence and fence is not None:
+            for l in fence:
+                if not l.strip():
+                    continue
+                out.append(f"`{l}`" if "`" not in l and len(l) <= 80 else l)
+            fence = None
+            continue
+        if fence is not None:
+            fence.append(line)
+        else:
+            out.append(line)
+    if fence:
+        out.extend(fence)
+    return "\n".join(out)
+
+
 def _is_table_sep(line: str) -> bool:
     s = line.strip().strip("|")
     return bool(s) and all(re.fullmatch(r":?-{2,}:?", c.strip()) for c in s.split("|") if c.strip() != "") \
@@ -83,7 +111,7 @@ def _is_table_sep(line: str) -> bool:
 
 def _card_elements(markdown: str) -> list[dict]:
     """把 markdown 文本按表格分段：表格→原生 table，其余→markdown。"""
-    lines = markdown.splitlines()
+    lines = _normalize_markdown(markdown).splitlines()
     elements, buf, i = [], [], 0
     while i < len(lines):
         line = lines[i]

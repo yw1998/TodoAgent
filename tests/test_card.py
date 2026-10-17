@@ -50,3 +50,16 @@ def test_non_table_pipes_not_converted():
     md = "回复「完成 | 延后」即可"
     els = build_card("t", md)["elements"]
     assert len(els) == 1 and els[0]["tag"] == "markdown"
+
+
+def test_fenced_code_block_converted():
+    md = "周期为：\n```\n0 10 * * *\n```\n到点提醒你"
+    els = build_card("t", md)["elements"]
+    content = json.dumps(els, ensure_ascii=False)
+    assert "```" not in content
+    assert "`0 10 * * *`" in content
+
+
+def test_double_backtick_normalized():
+    els = build_card("t", "时间 ``08:00`` 提醒")["elements"]
+    assert "`08:00`" in els[0]["content"]
