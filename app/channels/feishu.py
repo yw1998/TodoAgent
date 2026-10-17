@@ -1,4 +1,4 @@
-"""飞书渠道：tenant_access_token 缓存、发消息、事件验签与解密。"""
+"""飞书渠道（单人使用）：tenant_access_token 缓存、向固定通知目标发消息、事件验签与解密。"""
 
 import base64
 import hashlib
@@ -9,16 +9,12 @@ import time
 import httpx
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from app.channels.base import Channel
-from app.db.models import User
 from app.services import setting_service
 
 BASE_URL = "https://open.feishu.cn"
 
 
-class FeishuChannel(Channel):
-    name = "feishu"
-
+class FeishuChannel:
     def __init__(self):
         self._token: str = ""
         self._token_expire_at: float = 0
@@ -39,10 +35,14 @@ class FeishuChannel(Channel):
         self._token_expire_at = time.time() + data.get("expire", 7200)
         return self._token
 
-    async def _send(self, session, user: User, msg_type: str, content: dict) -> None:
+    async def _send(self, session, msg_type: str, content: dict) -> None:
+        cfg = await setting_service.get_settings(session)
+        chat_id = cfg.get("feishu_notify_chat_id", "")
+        open_id = cfg.get("feishu_notify_open_id", "")
+        receive_id_type, receive_id = ("chat_id", chat_id) if chat_id else ("open_id", open_id)
+        if not receive_id:
+            raise RuntimeError("通知目标未设置：先给机器人发一条消息，或在配置页填写 feishu_notify_*")
         token = await self._get_token(session)
-        receive_id_type = "chat_id" if user.chat_id.startswith("oc_") else "open_id"
-        receive_id = user.chat_id or user.external_id
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(
                 f"{BASE_URL}/open-apis/im/v1/messages?receive_id_type={receive_id_type}",
@@ -54,16 +54,16 @@ class FeishuChannel(Channel):
         if data.get("code") != 0:
             raise RuntimeError(f"feishu send error: {data}")
 
-    async def send_text(self, session, user: User, text: str) -> None:
-        await self._send(session, user, "text", {"text": text})
+    async def send_text(self, session, text: str) -> None:
+        await self._send(session, "text", {"text": text})
 
-    async def send_card(self, session, user: User, title: str, markdown: str,
+    async def send_card(self, session, title: str, markdown: str,
                         template: str = "blue", extra_elements: list[dict] | None = None) -> None:
-        await self._send(session, user, "interactive",
+        await self._send(session, "interactive",
                          build_card(title, markdown, template, extra_elements))
 
-    async def send_card_message(self, session, user: User, card: dict) -> None:
-        await self._send(session, user, "interactive", card)
+    async def send_card_message(self, session, card: dict) -> None:
+        await self._send(session, "interactive", card)
 
 
 def build_card(title: str, markdown: str, template: str = "blue",
@@ -81,7 +81,7 @@ def reminder_buttons(todo_id: int, snooze_minutes: int = 30) -> dict:
         "tag": "action",
         "actions": [
             {"tag": "button",
-             "text": {"tag": "plain_text", "content": f"✅ 完成"},
+             "text": {"tag": "plain_text", "content": "✅ 完成"},
              "type": "primary", "action_type": "request",
              "value": {"act": "complete", "todo_id": str(todo_id)}},
             {"tag": "button",
@@ -101,8 +101,8 @@ _FENCE_RE = re.compile(r"^\s*```[^\n]*$")
 
 
 def _normalize_markdown(md: str) -> str:
-    """飞书卡片 markdown 不支持围栏代码块与 `` 双反引号，转换为可行形式。"""
-    md = re.sub(r"``([^`\n]+?)``", r"`\1`", md)
+    """飞书卡片 markdown 不支持反引号代码语法(实测原样显示)：
+    行内 `x` → *x* 斜体；围栏代码块 → 紫色彩色文本行。"""
     out, fence = [], None
     for line in md.splitlines():
         is_fence = bool(_FENCE_RE.match(line))
@@ -111,9 +111,8 @@ def _normalize_markdown(md: str) -> str:
             continue
         if is_fence and fence is not None:
             for l in fence:
-                if not l.strip():
-                    continue
-                out.append(f"`{l}`" if "`" not in l and len(l) <= 80 else l)
+                if l.strip():
+                    out.append(f"<font color='purple'>{l}</font>" if "<" not in l else l)
             fence = None
             continue
         if fence is not None:
@@ -122,7 +121,14 @@ def _normalize_markdown(md: str) -> str:
             out.append(line)
     if fence:
         out.extend(fence)
-    return "\n".join(out)
+    md = "\n".join(out)
+
+    def _inline(m):
+        s = m.group(1).strip() or m.group(1)
+        return f"*{s}*" if "*" not in s and "<" not in s else f"<font color='purple'>{s}</font>"
+    md = re.sub(r"``([^`\n]+?)``", _inline, md)
+    md = re.sub(r"`([^`\n]+?)`", _inline, md)
+    return md
 
 
 def _is_table_sep(line: str) -> bool:

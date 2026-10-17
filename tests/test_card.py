@@ -52,14 +52,22 @@ def test_non_table_pipes_not_converted():
     assert len(els) == 1 and els[0]["tag"] == "markdown"
 
 
-def test_fenced_code_block_converted():
+def test_inline_code_converted_to_italic():
+    els = build_card("t", "时间 ``08:00`` 提醒，周期 `daily`")["elements"]
+    content = els[0]["content"]
+    assert "`" not in content
+    assert "*08:00*" in content and "*daily*" in content
+
+
+def test_inline_code_with_asterisks_uses_font():
+    els = build_card("t", "cron 表达式 `0 10 * * *` 已设置")["elements"]
+    content = els[0]["content"]
+    assert "`" not in content and "<font color='purple'>0 10 * * *</font>" in content
+
+
+def test_fenced_code_block_converted_to_font_lines():
     md = "周期为：\n```\n0 10 * * *\n```\n到点提醒你"
     els = build_card("t", md)["elements"]
     content = json.dumps(els, ensure_ascii=False)
-    assert "```" not in content
-    assert "`0 10 * * *`" in content
-
-
-def test_double_backtick_normalized():
-    els = build_card("t", "时间 ``08:00`` 提醒")["elements"]
-    assert "`08:00`" in els[0]["content"]
+    assert "```" not in content and "`" not in content.replace("``", "")
+    assert "<font color='purple'>0 10 * * *</font>" in content

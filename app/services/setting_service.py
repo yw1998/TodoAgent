@@ -15,6 +15,7 @@ SECRET_KEYS = {"llm_api_key", "feishu_app_secret", "feishu_verification_token", 
 KNOWN_KEYS = [
     "llm_base_url", "llm_api_key", "llm_model", "llm_temperature", "llm_timeout",
     "feishu_app_id", "feishu_app_secret", "feishu_verification_token", "feishu_encrypt_key",
+    "feishu_notify_open_id", "feishu_notify_chat_id",
     "scheduler_timezone", "scheduler_tick_seconds", "scheduler_max_retry",
     "reminder_max_times", "reminder_interval_minutes",
 ]

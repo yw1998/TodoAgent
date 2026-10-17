@@ -1,4 +1,4 @@
-"""提醒调度：APScheduler jobstore + 周期性 DB 兜底扫描，乐观锁防重复发送。"""
+"""提醒调度：APScheduler jobstore + 周期性 DB 兜底扫描，乐观锁防重复发送（单人）。"""
 
 import asyncio
 import logging
@@ -10,7 +10,6 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from sqlalchemy import select, update
-from sqlalchemy.orm import selectinload
 
 from app.config import get_env
 from app.db.models import ReminderLog, Todo
@@ -77,12 +76,6 @@ def cancel_todo_job(todo_id: int) -> None:
         pass
 
 
-async def _load_todo(session, todo_id: int) -> Todo | None:
-    return (await session.execute(
-        select(Todo).options(selectinload(Todo.user)).where(Todo.id == todo_id)
-    )).scalar_one_or_none()
-
-
 async def fire_reminder(todo_id: int) -> None:
     async with SessionLocal() as session:
         todo = await _load_todo(session, todo_id)
@@ -104,7 +97,7 @@ async def fire_reminder(todo_id: int) -> None:
             return  # 其他执行者已抢占
         await session.commit()
         todo = (await session.execute(
-            select(Todo).options(selectinload(Todo.user)).where(Todo.id == todo_id),
+            select(Todo).where(Todo.id == todo_id),
             execution_options={"populate_existing": True},
         )).scalar_one()  # 重新加载，拿到自增后的 remind_count
         logger.info("firing reminder todo#%s title=%r count=%d", todo_id, todo.title, todo.remind_count)
@@ -136,12 +129,18 @@ async def fire_reminder(todo_id: int) -> None:
             await session.commit()
             cancel_todo_job(todo.id)
             from app import state as app_state
-            app_state.clear_if_matches(todo.user_id, todo.id)
+            app_state.clear_if_matches(todo.id)
             logger.info("todo#%s overdue after %d reminders (max=%d)", todo.id, todo.remind_count, max_times)
         else:
             todo.next_remind_at = utcnow() + timedelta(minutes=interval)
             await session.commit()
             schedule_todo_job(todo.id, todo.next_remind_at)
+
+
+async def _load_todo(session, todo_id: int) -> Todo | None:
+    return (await session.execute(
+        select(Todo).where(Todo.id == todo_id)
+    )).scalar_one_or_none()
 
 
 async def _send_with_retry(session, todo: Todo, card: dict) -> None:
@@ -152,10 +151,9 @@ async def _send_with_retry(session, todo: Todo, card: dict) -> None:
     delay = 2
     for attempt in range(max_retry + 1):
         try:
-            await feishu_channel.send_card_message(session, todo.user, card)
-            state.set_last_reminded(todo.user_id, todo.id)
-            logger.info("reminder sent todo#%s, last_reminded=%d->%d",
-                        todo.id, todo.user_id, todo.id)
+            await feishu_channel.send_card_message(session, card)
+            state.set_last_reminded(todo.id)
+            logger.info("reminder sent todo#%s", todo.id)
             session.add(ReminderLog(todo_id=todo.id, status="ok"))
             await session.commit()
             return
@@ -185,7 +183,7 @@ async def restore_jobs() -> None:
     """启动时把所有 pending 待办重新注册为 job。"""
     async with SessionLocal() as session:
         rows = (await session.execute(
-            select(Todo).options(selectinload(Todo.user)).where(Todo.status == "pending")
+            select(Todo).where(Todo.status == "pending")
         )).scalars().all()
     for todo in rows:
         if todo.next_remind_at <= utcnow():

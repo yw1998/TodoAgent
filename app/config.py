@@ -24,6 +24,8 @@ class EnvSettings(BaseSettings):
     feishu_app_secret: str = ""
     feishu_verification_token: str = ""
     feishu_encrypt_key: str = ""
+    feishu_notify_open_id: str = ""
+    feishu_notify_chat_id: str = ""
 
     scheduler_timezone: str = "Asia/Shanghai"
     scheduler_tick_seconds: int = 30

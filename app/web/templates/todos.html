@@ -9,10 +9,6 @@
     <option value="{{ s }}" {{ 'selected' if f_status==s }}>{{ s }}</option>
     {% endfor %}
   </select>
-  <select name="user_id">
-    <option value="">全部用户</option>
-    {% for u in users %}<option value="{{ u.id }}" {{ 'selected' if f_user==u.id }}>{{ u.name or u.external_id }}</option>{% endfor %}
-  </select>
   <input name="q" placeholder="标题或备注关键字" value="{{ f_q }}">
   <button class="btn" type="submit">筛选</button>
 </form>
@@ -20,13 +16,12 @@
 <div class="panel">
 <table>
   <thead>
-  <tr><th>ID</th><th>用户</th><th>标题</th><th>下次提醒</th><th>周期</th><th>状态</th><th>提醒</th><th>操作</th></tr>
+  <tr><th>ID</th><th>标题</th><th>下次提醒</th><th>周期</th><th>状态</th><th>提醒</th><th>操作</th></tr>
   </thead>
   <tbody>
   {% for t in todos %}
   <tr>
     <td class="muted">{{ t.id }}</td>
-    <td>{{ t.user_id }}</td>
     <td>{{ t.title }}{% if t.note %}<br><small>{{ t.note }}</small>{% endif %}</td>
     <td>{{ t.next_remind_at | localtime }}</td>
     <td>{% if t.repeat_cron %}<code>{{ t.repeat_cron }}</code>{% else %}<span class="muted">-</span>{% endif %}</td>
@@ -46,7 +41,7 @@
     </td>
   </tr>
   {% else %}
-  <tr><td colspan="8" class="empty">暂无数据</td></tr>
+  <tr><td colspan="7" class="empty">暂无数据</td></tr>
   {% endfor %}
   </tbody>
 </table>

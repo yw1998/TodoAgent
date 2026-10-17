@@ -15,10 +15,6 @@
 <h1 class="page">消息日志</h1>
 
 <form class="filters" method="get">
-  <select name="user_id">
-    <option value="">全部用户</option>
-    {% for u in users %}<option value="{{ u.id }}" {{ 'selected' if f_user==u.id }}>{{ u.name or u.external_id }}</option>{% endfor %}
-  </select>
   <select name="direction">
     <option value="">收+发</option>
     <option value="in" {{ 'selected' if f_dir=='in' }}>收到</option>
@@ -35,12 +31,11 @@
 
 <div class="panel">
 <table>
-  <thead><tr><th>时间</th><th>用户</th><th>方向</th><th>内容 / 详情</th><th>状态</th><th>耗时</th></tr></thead>
+  <thead><tr><th>时间</th><th>方向</th><th>内容 / 详情</th><th>状态</th><th>耗时</th></tr></thead>
   <tbody>
-  {% for m, u in rows %}
+  {% for m in rows %}
   <tr>
     <td>{{ m.created_at | localmd }}</td>
-    <td>{{ u.name or u.external_id if u else '-' }}</td>
     <td><span class="arrow {% if m.direction=='in' %}dir-in{% else %}dir-out{% endif %}">{{ '→ 收到' if m.direction=='in' else '← 回复' }}</span></td>
     <td>
       <details>
@@ -63,12 +58,12 @@
     <td><span class="tag {{ 'ok' if m.status=='ok' else 'error' }}">{{ m.status }}</span></td>
     <td><small>{{ m.latency_ms }}ms</small></td>
   </tr>
-  {% else %}<tr><td colspan="6" class="empty">暂无日志</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="5" class="empty">暂无日志</td></tr>{% endfor %}
   </tbody>
 </table>
 </div>
 
-{% set qs = 'user_id='~(f_user or '')~'&direction='~f_dir~'&status='~f_status~'&q='~f_q %}
+{% set qs = 'direction='~f_dir~'&status='~f_status~'&q='~f_q %}
 <div class="pager">
   {% if page > 1 %}<a href="?page={{ page-1 }}&{{ qs }}">上一页</a>{% endif %}
   <span>第 {{ page }} 页</span>

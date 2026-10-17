@@ -85,7 +85,6 @@
     <a class="brand" href="/admin/todos">TodoAgent</a>
     <nav>
       <a href="/admin/todos" class="{{ 'cur' if request.url.path in ('/admin/','/admin/todos') else '' }}">待办事项</a>
-      <a href="/admin/users" class="{{ 'cur' if request.url.path=='/admin/users' else '' }}">用户</a>
       <a href="/admin/settings" class="{{ 'cur' if request.url.path=='/admin/settings' else '' }}">配置</a>
       <a href="/admin/logs" class="{{ 'cur' if request.url.path=='/admin/logs' else '' }}">日志</a>
     </nav>

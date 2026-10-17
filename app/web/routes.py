@@ -1,4 +1,4 @@
-"""管理页面（服务端渲染 + 表单），cookie 中存 JWT。"""
+"""管理页面（服务端渲染 + 表单），cookie 中存 JWT（单人使用）。"""
 
 from datetime import datetime, timezone
 from pathlib import Path
@@ -6,21 +6,19 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import create_token, decode_token
 from app.config import get_env
-from app.db.models import Admin, MessageLog, Todo, User
-from app.db.session import get_session, hash_password, verify_password
-from app.scheduler import reminder
-from app.services import setting_service, todo_service, user_service
+from app.db.models import Admin, MessageLog, Todo
+from app.db.session import get_session, verify_password
+from app.services import setting_service, todo_service
 
 router = APIRouter(prefix="/admin")
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
-from fastapi.templating import Jinja2Templates
-
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
@@ -44,8 +42,7 @@ templates.env.filters["localmd"] = localmd
 templates.env.globals["tz_label"] = lambda: get_env().scheduler_timezone
 
 
-async def require_page(request: Request) -> str | None:
-    """页面级鉴权：无有效 cookie 则跳登录。"""
+async def require_page(request: Request):
     token = request.cookies.get("token")
     if token:
         try:
@@ -83,15 +80,12 @@ async def logout():
 @router.get("/", response_class=HTMLResponse)
 @router.get("/todos", response_class=HTMLResponse)
 async def todos_page(request: Request, status: str | None = None, q: str | None = None,
-                     user_id: int | None = None, page: int = 1,
-                     session: AsyncSession = Depends(get_session)):
+                     page: int = 1, session: AsyncSession = Depends(get_session)):
     if redirect := await require_page(request):
         return redirect
-    rows = await todo_service.admin_query(session, status, user_id, q, page=page, size=20)
-    users = (await session.execute(select(User).order_by(User.id))).scalars().all()
+    rows = await todo_service.admin_query(session, status, q, page=page, size=20)
     return templates.TemplateResponse(request, "todos.html", {
-        "todos": rows, "users": users,
-        "f_status": status or "", "f_q": q or "", "f_user": user_id, "page": page,
+        "todos": rows, "f_status": status or "", "f_q": q or "", "page": page,
     })
 
 
@@ -100,15 +94,10 @@ async def todo_action(request: Request, todo_id: int, action: str = Form(...),
                       session: AsyncSession = Depends(get_session)):
     if redirect := await require_page(request):
         return redirect
-    todo = await session.get(Todo, todo_id)
-    if todo:
-        if action == "done":
-            todo.status = "done"
-            reminder.cancel_todo_job(todo_id)
-        elif action == "cancel":
-            todo.status = "cancelled"
-            reminder.cancel_todo_job(todo_id)
-        await session.commit()
+    if action == "done":
+        await todo_service.complete_todo(session, todo_id)
+    elif action == "cancel":
+        await todo_service.delete_todo(session, todo_id)
     return RedirectResponse("/admin/todos", status_code=302)
 
 
@@ -139,34 +128,21 @@ async def settings_submit(request: Request, session: AsyncSession = Depends(get_
     return RedirectResponse("/admin/settings?saved=1", status_code=302)
 
 
-@router.get("/users", response_class=HTMLResponse)
-async def users_page(request: Request, session: AsyncSession = Depends(get_session)):
-    if redirect := await require_page(request):
-        return redirect
-    rows = await user_service.list_users_with_counts(session)
-    return templates.TemplateResponse(request, "users.html", {"rows": rows})
-
-
 @router.get("/logs", response_class=HTMLResponse)
-async def logs_page(request: Request, page: int = 1, user_id: int | None = None,
-                    direction: str | None = None, status: str | None = None,
-                    q: str | None = None, session: AsyncSession = Depends(get_session)):
+async def logs_page(request: Request, page: int = 1, direction: str | None = None,
+                    status: str | None = None, q: str | None = None,
+                    session: AsyncSession = Depends(get_session)):
     if redirect := await require_page(request):
         return redirect
-    sq = (select(MessageLog, User)
-          .outerjoin(User, MessageLog.user_id == User.id)
-          .order_by(MessageLog.id.desc()))
-    if user_id:
-        sq = sq.where(MessageLog.user_id == user_id)
+    sq = select(MessageLog).order_by(MessageLog.id.desc())
     if direction in ("in", "out"):
         sq = sq.where(MessageLog.direction == direction)
     if status in ("ok", "error"):
         sq = sq.where(MessageLog.status == status)
     if q:
         sq = sq.where(MessageLog.content.contains(q))
-    rows = (await session.execute(sq.offset((page - 1) * 30).limit(30))).all()
-    users = (await session.execute(select(User).order_by(User.id))).scalars().all()
+    rows = (await session.execute(sq.offset((page - 1) * 30).limit(30))).scalars().all()
     return templates.TemplateResponse(request, "logs.html", {
-        "rows": rows, "users": users, "page": page,
-        "f_user": user_id, "f_dir": direction or "", "f_status": status or "", "f_q": q or "",
+        "rows": rows, "page": page,
+        "f_dir": direction or "", "f_status": status or "", "f_q": q or "",
     })

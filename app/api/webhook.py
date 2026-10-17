@@ -1,4 +1,4 @@
-"""飞书事件回调：验签/解密、去重、快速 ACK、投递队列由后台 worker 消费。"""
+"""飞书事件回调：验签/解密、去重、快速 ACK、投递队列由后台 worker 消费（单人）。"""
 
 import asyncio
 import json
@@ -6,7 +6,7 @@ import logging
 import time
 from collections import OrderedDict
 
-from fastapi import HTTPException, Request, APIRouter
+from fastapi import APIRouter, HTTPException, Request
 
 from app.db.models import MessageLog
 from app.db.session import SessionLocal
@@ -41,8 +41,23 @@ async def _verify_token(token: str) -> None:
     async with SessionLocal() as session:
         expected = await setting_service.get_setting(session, "feishu_verification_token")
     if expected and token != expected:
-        _reject(401, "invalid verification token",
-                got_len=len(token), expected_set=True)
+        _reject(401, "invalid verification token", got_len=len(token))
+
+
+async def _learn_notify_target(open_id: str, chat_id: str) -> None:
+    """记住最后来消息的会话作为提醒发送目标。"""
+    if not open_id:
+        return
+    async with SessionLocal() as session:
+        cfg = await setting_service.get_settings(session)
+        updates = {}
+        if cfg.get("feishu_notify_open_id") != open_id:
+            updates["feishu_notify_open_id"] = open_id
+        if chat_id and chat_id.startswith("oc_") and cfg.get("feishu_notify_chat_id") != chat_id:
+            updates["feishu_notify_chat_id"] = chat_id
+        if updates:
+            await setting_service.save_settings(session, updates)
+            logger.info("notify target updated: %s", updates.get("feishu_notify_chat_id") or open_id)
 
 
 @router.post("/feishu/events")
@@ -57,15 +72,13 @@ async def feishu_events(request: Request):
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
         _reject(400, f"invalid JSON body: {e}", body_preview=body[:200].decode("utf-8", "replace"))
     if not isinstance(payload, dict):
-        _reject(400, "invalid event payload: not an object",
-                payload_type=type(payload).__name__)
+        _reject(400, "invalid event payload: not an object", payload_type=type(payload).__name__)
 
     if "encrypt" in payload:
         async with SessionLocal() as session:
             encrypt_key = await setting_service.get_setting(session, "feishu_encrypt_key")
         if not encrypt_key:
-            _reject(400, "payload encrypted but feishu_encrypt_key not configured",
-                    keys=list(payload.keys()))
+            _reject(400, "payload encrypted but feishu_encrypt_key not configured", keys=list(payload.keys()))
         from app.channels.feishu import decrypt_event
         try:
             payload = decrypt_event(payload["encrypt"], encrypt_key)
@@ -118,13 +131,9 @@ async def feishu_events(request: Request):
                        event_id or "-", bool(text), bool(open_id))
         return {"code": 0}
 
-    await queue.put({
-        "open_id": open_id,
-        "chat_id": msg.get("chat_id", ""),
-        "text": text,
-    })
-    logger.info("event %s enqueued: user=%s chat=%s len=%d queue=%d",
-                event_id or "-", open_id, msg.get("chat_id", ""), len(text), queue.qsize())
+    await _learn_notify_target(open_id, msg.get("chat_id", ""))
+    await queue.put({"open_id": open_id, "chat_id": msg.get("chat_id", ""), "text": text})
+    logger.info("event %s enqueued: len=%d queue=%d", event_id or "-", len(text), queue.qsize())
     return {"code": 0}  # 快速 ACK，3s 限制
 
 
@@ -147,18 +156,14 @@ async def worker_loop(concurrency: int) -> None:
 async def process_message(item: dict) -> None:
     from app.agent.service import handle_message
     from app.channels.feishu import feishu_channel
-    from app.services.user_service import upsert_user
 
-    logger.info("processing: user=%s text=%r", item["open_id"], item["text"][:100])
+    logger.info("processing: text=%r", item["text"][:100])
     async with SessionLocal() as session:
-        user = await upsert_user(session, "feishu", item["open_id"],
-                                 item["open_id"], item["chat_id"])
-        reply = await handle_message(session, user, item["text"])
-        session.add(MessageLog(user_id=user.id, direction="out", content=reply, status="ok"))
+        reply = await handle_message(session, item["text"])
+        session.add(MessageLog(direction="out", content=reply, status="ok"))
         await session.commit()
         try:
-            await feishu_channel.send_card(session, user, "📋 TodoAgent", reply)
-            logger.info("replied to user=%s len=%d", item["open_id"], len(reply))
+            await feishu_channel.send_card(session, "📋 TodoAgent", reply)
+            logger.info("replied len=%d", len(reply))
         except Exception:
-            logger.exception("reply send failed: user=%s reply=%r",
-                             item["open_id"], reply[:200])
+            logger.exception("reply send failed: reply=%r", reply[:200])

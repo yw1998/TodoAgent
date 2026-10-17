@@ -34,12 +34,59 @@ def verify_password(password: str, stored: str) -> bool:
         return False
 
 
+_MIGRATE_TABLES = {
+    "todos": ["id", "title", "note", "next_remind_at", "repeat_cron", "status",
+              "source_message", "remind_count", "created_at", "updated_at", "done_at"],
+    "message_logs": ["id", "direction", "content", "tool_calls", "status",
+                     "error", "latency_ms", "created_at"],
+}
+
+
+async def _migrate_drop_users(conn) -> None:
+    """单人部署：删除历史 users 表及 user_id 列（重建表搬数据，保留全部记录）。"""
+    if conn.engine.dialect.name != "sqlite":
+        return
+
+    def run(sync_conn):
+        from sqlalchemy import inspect
+        existing = set(inspect(sync_conn).get_table_names())
+        for table, cols in _MIGRATE_TABLES.items():
+            if table not in existing:
+                continue
+            colnames = [r[1] for r in sync_conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()]
+            if "user_id" not in colnames:
+                continue
+            new_name = f"{table}_new"
+            from sqlalchemy import MetaData
+            tmp_md = MetaData()
+            tbl = Base.metadata.tables[table].to_metadata(tmp_md, name=new_name)
+            for ix in list(tbl.indexes):
+                tbl.indexes.remove(ix)
+            tbl.create(sync_conn, checkfirst=False)
+            shared = [c for c in cols if c in colnames]
+            cols_sql = ", ".join(shared)
+            sync_conn.exec_driver_sql(f"INSERT INTO {new_name} ({cols_sql}) SELECT {cols_sql} FROM {table}")
+            sync_conn.exec_driver_sql(f"DROP TABLE {table}")
+            sync_conn.exec_driver_sql(f"ALTER TABLE {new_name} RENAME TO {table}")
+            for ix in Base.metadata.tables[table].indexes:
+                ix.create(sync_conn, checkfirst=True)
+        sync_conn.exec_driver_sql("DROP TABLE IF EXISTS users")
+        for (name,) in sync_conn.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type='index'").fetchall():
+            idx_cols = [r[2] for r in sync_conn.exec_driver_sql(f"PRAGMA index_info('{name}')").fetchall()]
+            if "user_id" in idx_cols:
+                sync_conn.exec_driver_sql(f"DROP INDEX IF EXISTS {name}")
+
+    await conn.run_sync(run)
+
+
 async def init_db() -> None:
     from app.db import models  # noqa: F401  ensure all tables registered
 
     async with engine.begin() as conn:
         if _sync_url.startswith("sqlite"):
             await conn.exec_driver_sql("PRAGMA journal_mode=WAL")
+        await _migrate_drop_users(conn)
         await conn.run_sync(Base.metadata.create_all)
 
     async with SessionLocal() as session:

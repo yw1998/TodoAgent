@@ -1,4 +1,4 @@
-"""管理后台 REST API。"""
+"""管理后台 REST API（单人使用）。"""
 
 from datetime import datetime
 
@@ -9,10 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.auth import create_token
-from app.db.models import Admin, MessageLog, ReminderLog, Todo, User
+from app.db.models import Admin, MessageLog, Todo
 from app.db.session import get_session, verify_password
 from app.scheduler import reminder
-from app.services import setting_service, todo_service, user_service
+from app.services import setting_service, todo_service
 
 router = APIRouter(prefix="/api/admin")
 
@@ -31,12 +31,12 @@ async def login(body: LoginBody, session: AsyncSession = Depends(get_session)):
 
 
 @router.get("/todos")
-async def list_todos(status: str | None = None, user_id: int | None = None, q: str | None = None,
+async def list_todos(status: str | None = None, q: str | None = None,
                      page: int = 1, size: int = 20,
                      session: AsyncSession = Depends(get_session)):
-    rows = await todo_service.admin_query(session, status, user_id, q, page=page, size=size)
+    rows = await todo_service.admin_query(session, status, q, page=page, size=size)
     return [{
-        "id": t.id, "user_id": t.user_id, "title": t.title, "note": t.note,
+        "id": t.id, "title": t.title, "note": t.note,
         "next_remind_at": t.next_remind_at.isoformat(), "repeat_cron": t.repeat_cron,
         "status": t.status, "remind_count": t.remind_count,
         "created_at": t.created_at.isoformat(),
@@ -46,13 +46,12 @@ async def list_todos(status: str | None = None, user_id: int | None = None, q: s
 @router.get("/todos/{todo_id}")
 async def todo_detail(todo_id: int, session: AsyncSession = Depends(get_session)):
     todo = (await session.execute(
-        select(Todo).options(selectinload(Todo.user), selectinload(Todo.reminder_logs)).where(Todo.id == todo_id)
+        select(Todo).options(selectinload(Todo.reminder_logs)).where(Todo.id == todo_id)
     )).scalar_one_or_none()
     if not todo:
         raise HTTPException(status_code=404)
     return {
         "id": todo.id, "title": todo.title, "note": todo.note, "status": todo.status,
-        "user": todo.user.name or todo.user.external_id,
         "next_remind_at": todo.next_remind_at.isoformat(), "repeat_cron": todo.repeat_cron,
         "source_message": todo.source_message, "remind_count": todo.remind_count,
         "created_at": todo.created_at.isoformat(),
@@ -70,33 +69,17 @@ class TodoPatch(BaseModel):
 
 @router.patch("/todos/{todo_id}")
 async def patch_todo(todo_id: int, body: TodoPatch, session: AsyncSession = Depends(get_session)):
-    todo = await session.get(Todo, todo_id)
+    fields = {k: v for k, v in body.model_dump(exclude_none=True).items()}
+    todo = await todo_service.update_todo(session, todo_id, **fields) if fields else None
     if not todo:
-        raise HTTPException(status_code=404)
-    if body.title is not None:
-        todo.title = body.title
-    if body.note is not None:
-        todo.note = body.note
-    if body.remind_at is not None:
-        todo.next_remind_at = body.remind_at
-    if body.status in ("pending", "done", "cancelled", "overdue"):
-        todo.status = body.status
-    await session.commit()
-    if todo.status == "pending" and todo.next_remind_at > reminder.utcnow():
-        reminder.schedule_todo_job(todo.id, todo.next_remind_at)
-    else:
-        reminder.cancel_todo_job(todo_id)
-    return {"ok": True}
+        raise HTTPException(status_code=404, detail="待办不存在或状态不允许修改")
+    return {"ok": True, "status": todo.status}
 
 
 @router.delete("/todos/{todo_id}")
 async def cancel_todo(todo_id: int, session: AsyncSession = Depends(get_session)):
-    todo = await session.get(Todo, todo_id)
-    if not todo:
+    if not await todo_service.delete_todo(session, todo_id):
         raise HTTPException(status_code=404)
-    todo.status = "cancelled"
-    await session.commit()
-    reminder.cancel_todo_job(todo_id)
     return {"ok": True}
 
 
@@ -115,23 +98,18 @@ async def put_settings(body: SettingsBody, session: AsyncSession = Depends(get_s
     return {"ok": True}
 
 
-@router.get("/users")
-async def get_users(session: AsyncSession = Depends(get_session)):
-    rows = await user_service.list_users_with_counts(session)
-    return [{"id": u.id, "channel": u.channel, "external_id": u.external_id,
-             "name": u.name, "chat_id": u.chat_id, "pending_count": c} for u, c in rows]
-
-
 @router.get("/message-logs")
-async def message_logs(user_id: int | None = None, status: str | None = None,
-                       page: int = 1, size: int = 50,
+async def message_logs(status: str | None = None, direction: str | None = None,
+                       q: str | None = None, page: int = 1, size: int = 50,
                        session: AsyncSession = Depends(get_session)):
     sq = select(MessageLog).order_by(MessageLog.id.desc()).offset((page - 1) * size).limit(size)
-    if user_id:
-        sq = sq.where(MessageLog.user_id == user_id)
     if status:
         sq = sq.where(MessageLog.status == status)
+    if direction:
+        sq = sq.where(MessageLog.direction == direction)
+    if q:
+        sq = sq.where(MessageLog.content.contains(q))
     rows = (await session.execute(sq)).scalars().all()
-    return [{"id": m.id, "user_id": m.user_id, "direction": m.direction, "content": m.content,
+    return [{"id": m.id, "direction": m.direction, "content": m.content,
              "tool_calls": m.tool_calls, "status": m.status, "error": m.error,
              "latency_ms": m.latency_ms, "created_at": m.created_at.isoformat()} for m in rows]

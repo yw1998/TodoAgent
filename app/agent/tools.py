@@ -1,4 +1,4 @@
-"""LLM Tool schema 定义与 handler 注册表。"""
+"""LLM Tool schema 定义与 handler 注册表（单人使用）。"""
 
 import json
 from datetime import datetime
@@ -30,7 +30,7 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "list_todos",
-            "description": "查询用户待办列表",
+            "description": "查询待办列表",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -46,7 +46,7 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "update_todo",
-            "description": "修改待办的标题/时间/备注/周期",
+            "description": "修改待办的标题/时间/备注/周期，或重新激活",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -97,7 +97,7 @@ def _fmt(dt_utc) -> str:
     return local.strftime("%Y-%m-%d %H:%M")
 
 
-async def h_create(session, user, args: dict, source_text: str = "") -> dict:
+async def h_create(session, args: dict, source_text: str = "") -> dict:
     try:
         remind_at = todo_service.parse_dt(args["remind_at"])
     except (ValueError, KeyError):
@@ -105,7 +105,7 @@ async def h_create(session, user, args: dict, source_text: str = "") -> dict:
     if remind_at <= reminder.utcnow():
         return {"ok": False, "error": "提醒时间必须晚于当前时间，请向用户确认时间"}
     todo = await todo_service.create_todo(
-        session, user, title=args["title"], remind_at=remind_at,
+        session, title=args["title"], remind_at=remind_at,
         repeat_cron=args.get("repeat_cron") or None, note=args.get("note") or "",
         source=source_text,
     )
@@ -113,20 +113,19 @@ async def h_create(session, user, args: dict, source_text: str = "") -> dict:
             "remind_at": _fmt(remind_at), "repeat_cron": todo.repeat_cron}
 
 
-async def h_list(session, user, args: dict) -> dict:
+async def h_list(session, args: dict) -> dict:
     frm = todo_service.parse_dt(args["from"]) if args.get("from") else None
     to = todo_service.parse_dt(args["to"]) if args.get("to") else None
     status = args.get("status", "pending")
-    todos = await todo_service.list_todos(session, user, status, frm, to)
+    todos = await todo_service.list_todos(session, status, frm, to)
     if status == "pending":
-        overdue = await todo_service.list_todos(session, user, "overdue", frm, to)
-        todos = todos + overdue
+        todos = todos + await todo_service.list_todos(session, "overdue", frm, to)
     return {"ok": True, "todos": [
         {"id": t.id, "title": t.title, "remind_at": _fmt(t.next_remind_at),
          "status": t.status, "repeat_cron": t.repeat_cron} for t in todos]}
 
 
-async def h_update(session, user, args: dict) -> dict:
+async def h_update(session, args: dict) -> dict:
     fields = {k: v for k, v in args.items() if k != "todo_id" and v is not None}
     if fields.get("remind_at"):
         try:
@@ -135,31 +134,32 @@ async def h_update(session, user, args: dict) -> dict:
             return {"ok": False, "error": "时间格式无法解析"}
         if fields["remind_at"] <= reminder.utcnow():
             return {"ok": False, "error": "提醒时间必须晚于当前时间"}
-    todo = await todo_service.update_todo(session, user, int(args["todo_id"]), **fields)
+    todo = await todo_service.update_todo(session, int(args["todo_id"]), **fields)
     if not todo:
-        return {"ok": False, "error": f"待办 #{args['todo_id']} 不存在或不属于该用户"}
+        return {"ok": False, "error": f"待办 #{args['todo_id']} 不存在"}
     if fields.get("status") == "pending":
         from app import state
-        state.clear_if_matches(user.id, todo.id)
+        state.clear_last_reminded()
     return {"ok": True, "todo_id": todo.id, "title": todo.title,
             "status": todo.status, "remind_at": _fmt(todo.next_remind_at)}
 
 
-async def h_complete(session, user, args: dict) -> dict:
-    todo = await todo_service.complete_todo(session, user, int(args["todo_id"]))
+async def h_complete(session, args: dict) -> dict:
+    todo = await todo_service.complete_todo(session, int(args["todo_id"]))
     if not todo:
-        return {"ok": False, "error": f"待办 #{args['todo_id']} 不存在或不属于该用户"}
+        return {"ok": False, "error": f"待办 #{args['todo_id']} 不存在"}
     from app import state
-    state.clear_if_matches(user.id, todo.id)
+    state.clear_if_matches(todo.id)
     return {"ok": True, "todo_id": todo.id, "title": todo.title}
 
 
-async def h_delete(session, user, args: dict) -> dict:
-    ok = await todo_service.delete_todo(session, user, int(args["todo_id"]))
+async def h_delete(session, args: dict) -> dict:
+    todo_id = int(args["todo_id"])
+    ok = await todo_service.delete_todo(session, todo_id)
     if ok:
         from app import state
-        state.clear_if_matches(user.id, int(args["todo_id"]))
-    return {"ok": ok} if ok else {"ok": False, "error": "待办不存在或不属于该用户"}
+        state.clear_if_matches(todo_id)
+    return {"ok": True} if ok else {"ok": False, "error": "待办不存在"}
 
 
 TOOL_HANDLERS = {
@@ -176,7 +176,7 @@ def build_system_prompt(now_utc: datetime, pending: list[dict], last_reminded_id
     from zoneinfo import ZoneInfo
     env = get_env()
     local = now_utc.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(env.scheduler_timezone))
-    lines = [f"- #{p['id']} {p['title']} (下次提醒 {_fmt(p['remind_at'])})" for p in pending]
+    lines = [f"- #{p['id']} {p['title']} (下次提醒 {_fmt(p['remind_at'])}, {p['status']})" for p in pending]
     if last_reminded_id:
         hit = next((p for p in pending if p["id"] == last_reminded_id), None)
         title = f" {hit['title']}" if hit else ""
