@@ -56,20 +56,20 @@ async def handle_card_action(payload: dict) -> dict:
 
         if act == "complete":
             if todo.status in ("done", "cancelled"):
-                card = build_card("ℹ️ 待办提醒", f"**{todo.title}**\n当前状态：{todo.status}，无需重复操作", "grey")
+                card = build_card(f"ℹ️ 待办提醒 · {todo.title}", f"**{todo.title}**\n当前状态：{todo.status}，无需重复操作", "grey")
                 return _resp(card, "info", "该待办已处理")
             await todo_service.complete_todo(session, todo.id)
             state.clear_if_matches(todo.id)
             _log(session, f"🔘 点击按钮完成 #{todo.id} {todo.title}")
             logger.info("button complete todo#%s", todo.id)
-            card = build_card("✅ 已完成", f"**{todo.title}**\n完成时间：{fmt_local(utcnow())}", "green")
+            card = build_card(f"✅ 已完成 · {todo.title}", f"**{todo.title}**\n完成时间：{fmt_local(utcnow())}", "green")
             return _resp(card, "success", "已标记完成")
 
         if act == "snooze":
             minutes = value.get("minutes", "30")
             minutes = int(minutes) if str(minutes).isdigit() else 30
             if todo.status in ("done", "cancelled"):
-                card = build_card("ℹ️ 待办提醒", f"**{todo.title}**\n当前状态：{todo.status}，无法延后", "grey")
+                card = build_card(f"ℹ️ 待办提醒 · {todo.title}", f"**{todo.title}**\n当前状态：{todo.status}，无法延后", "grey")
                 return _resp(card, "info", "该待办已处理")
             new_at = utcnow() + timedelta(minutes=minutes)
             if todo.status == "overdue":
@@ -79,7 +79,7 @@ async def handle_card_action(payload: dict) -> dict:
             state.set_last_reminded(todo.id)
             _log(session, f"🔘 点击按钮延后 #{todo.id} {todo.title} {minutes}分钟")
             logger.info("button snooze todo#%s +%dmin", todo.id, minutes)
-            card = build_card("⏰ 已延后",
+            card = build_card(f"⏰ 已延后 · {todo.title}",
                               f"**{todo.title}**\n将在 {fmt_local(new_at)} 再次提醒", "orange")
             return _resp(card, "success", f"已延后 {minutes} 分钟")
 

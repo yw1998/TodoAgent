@@ -35,8 +35,8 @@ async def test_agent_create_todo(session, monkeypatch):
         return calls.pop(0)
 
     monkeypatch.setattr(llm_client, "chat", fake_chat)
-    reply = await handle_message(session, "明天早上10点提醒我买菜")
-    assert "买菜" in reply
+    reply, card_title = await handle_message(session, "明天早上10点提醒我买菜")
+    assert "买菜" in reply and card_title == "✅ 已创建 · 买菜"
 
     from app.services import todo_service
     todos = await todo_service.list_todos(session, "pending")
@@ -48,5 +48,5 @@ async def test_agent_error_path(session, monkeypatch):
         raise RuntimeError("llm down")
 
     monkeypatch.setattr(llm_client, "chat", boom)
-    reply = await handle_message(session, "随便说点什么")
+    reply, _ = await handle_message(session, "随便说点什么")
     assert "出错" in reply

@@ -113,7 +113,7 @@ async def fire_reminder(todo_id: int) -> None:
             md += f"\n第 {todo.remind_count}/{max_times} 次提醒"
             if todo.remind_count >= max_times:
                 md += "，之后将标记为逾期"
-        card = build_card("⏰ 待办提醒", md, "orange",
+        card = build_card(f"⏰ 待办提醒 · {todo.title}", md, "orange",
                           [reminder_buttons(todo.id),
                            {"tag": "note", "elements": [{"tag": "plain_text",
                              "content": "也可以直接回复「完成」或「延后10分钟」"}]}])

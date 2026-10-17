@@ -41,7 +41,7 @@ async def handle_message(session: AsyncSession, text: str) -> str:
                 reply = msg.content or "抱歉，我没有理解你的意思，能换个说法吗？"
                 _append_context(text, reply)
                 await _log(session, "in", text, tool_trace, "ok", "", start)
-                return reply
+                return reply, _title_from_trace(tool_trace)
             messages.append({
                 "role": "assistant",
                 "content": msg.content or "",
@@ -62,12 +62,32 @@ async def handle_message(session: AsyncSession, text: str) -> str:
         reply = "抱歉，我处理这条消息时绕了太多弯路，请换个说法试试。"
         _append_context(text, reply)
         await _log(session, "in", text, tool_trace, "error", "max tool rounds exceeded", start)
-        return reply
+        return reply, "📋 TodoAgent"
     except Exception as e:
         logger.exception("agent failed: text=%r", text[:100])
         reply = f"抱歉，系统处理出错了（{type(e).__name__}），请稍后重试。"
         await _log(session, "in", text, tool_trace, "error", str(e)[:500], start)
-        return reply
+        return reply, "⚠️ 处理失败"
+
+
+_TITLE_BY_TOOL = {
+    "create_todo": "✅ 已创建",
+    "update_todo": "🔄 已更新",
+    "complete_todo": "✅ 已完成",
+    "delete_todo": "🗑 已取消",
+    "list_todos": "📋 待办清单",
+}
+
+
+def _title_from_trace(trace: list[dict]) -> str:
+    for t in reversed(trace):
+        result = t.get("result") or {}
+        if not result.get("ok"):
+            continue
+        base = _TITLE_BY_TOOL.get(t.get("tool", ""), "📋 TodoAgent")
+        title = (result.get("title") or "").strip()
+        return f"{base} · {title}" if title and base != "📋 待办清单" else base
+    return "📋 TodoAgent"
 
 
 def _append_context(text: str, reply: str) -> None:

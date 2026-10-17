@@ -159,11 +159,11 @@ async def process_message(item: dict) -> None:
 
     logger.info("processing: text=%r", item["text"][:100])
     async with SessionLocal() as session:
-        reply = await handle_message(session, item["text"])
+        reply, card_title = await handle_message(session, item["text"])
         session.add(MessageLog(direction="out", content=reply, status="ok"))
         await session.commit()
         try:
-            await feishu_channel.send_card(session, "📋 TodoAgent", reply)
-            logger.info("replied len=%d", len(reply))
+            await feishu_channel.send_card(session, card_title, reply)
+            logger.info("replied len=%d title=%r", len(reply), card_title)
         except Exception:
             logger.exception("reply send failed: reply=%r", reply[:200])
