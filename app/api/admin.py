@@ -34,13 +34,13 @@ async def login(body: LoginBody, session: AsyncSession = Depends(get_session)):
 async def list_todos(status: str | None = None, q: str | None = None,
                      page: int = 1, size: int = 20,
                      session: AsyncSession = Depends(get_session)):
-    rows = await todo_service.admin_query(session, status, q, page=page, size=size)
-    return [{
+    rows, total = await todo_service.admin_query(session, status, q, page=page, size=size)
+    return {"total": total, "page": page, "size": size, "items": [{
         "id": t.id, "title": t.title, "note": t.note,
         "next_remind_at": t.next_remind_at.isoformat(), "repeat_cron": t.repeat_cron,
         "status": t.status, "remind_count": t.remind_count,
         "created_at": t.created_at.isoformat(),
-    } for t in rows]
+    } for t in rows]}
 
 
 @router.get("/todos/{todo_id}")

@@ -20,7 +20,7 @@ logger = logging.getLogger("todoagent.agent")
 _context: deque = deque(maxlen=get_env().context_rounds * 2)
 
 
-async def handle_message(session: AsyncSession, text: str) -> str:
+async def handle_message(session: AsyncSession, text: str) -> tuple[str, str]:
     pending = await todo_service.list_todos(session, "pending")
     pending += await todo_service.list_todos(session, "overdue")
     pending_summary = [{"id": t.id, "title": t.title, "remind_at": t.next_remind_at,

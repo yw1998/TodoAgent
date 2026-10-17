@@ -55,6 +55,8 @@ async def test_overdue_snooze_reactivates(session, monkeypatch):
         "event": {"operator": {"open_id": "ou_od"},
                   "action": {"value": {"act": "snooze", "todo_id": str(todo.id), "minutes": "30"}}}})
     assert resp["toast"]["type"] == "success"
+    import asyncio
+    await asyncio.sleep(0.05)
     await session.refresh(todo)
     assert todo.status == "pending" and todo.remind_count == 0
 

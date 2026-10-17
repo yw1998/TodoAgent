@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import create_token, decode_token
@@ -83,9 +83,10 @@ async def todos_page(request: Request, status: str | None = None, q: str | None 
                      page: int = 1, session: AsyncSession = Depends(get_session)):
     if redirect := await require_page(request):
         return redirect
-    rows = await todo_service.admin_query(session, status, q, page=page, size=20)
+    rows, total = await todo_service.admin_query(session, status, q, page=page, size=20)
     return templates.TemplateResponse(request, "todos.html", {
         "todos": rows, "f_status": status or "", "f_q": q or "", "page": page,
+        "total_pages": max(1, -(-total // 20)), "total": total,
     })
 
 
@@ -134,15 +135,20 @@ async def logs_page(request: Request, page: int = 1, direction: str | None = Non
                     session: AsyncSession = Depends(get_session)):
     if redirect := await require_page(request):
         return redirect
-    sq = select(MessageLog).order_by(MessageLog.id.desc())
+    sq = select(MessageLog)
     if direction in ("in", "out"):
         sq = sq.where(MessageLog.direction == direction)
     if status in ("ok", "error"):
         sq = sq.where(MessageLog.status == status)
     if q:
         sq = sq.where(MessageLog.content.contains(q))
-    rows = (await session.execute(sq.offset((page - 1) * 30).limit(30))).scalars().all()
+    total = (await session.execute(
+        select(func.count()).select_from(sq.subquery())
+    )).scalar_one()
+    rows = (await session.execute(
+        sq.order_by(MessageLog.id.desc()).offset((page - 1) * 30).limit(30)
+    )).scalars().all()
     return templates.TemplateResponse(request, "logs.html", {
-        "rows": rows, "page": page,
+        "rows": rows, "page": page, "total": total, "total_pages": max(1, -(-total // 30)),
         "f_dir": direction or "", "f_status": status or "", "f_q": q or "",
     })

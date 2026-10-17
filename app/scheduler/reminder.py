@@ -109,14 +109,18 @@ async def fire_reminder(todo_id: int) -> None:
         interval = int(cfg.get("reminder_interval_minutes", 5) or 5)
         md = (f"**{todo.title}**\n"
               f"提醒时间：{fmt_local(todo.next_remind_at)}")
-        if not todo.repeat_cron and max_times > 1:
-            md += f"\n第 {todo.remind_count}/{max_times} 次提醒"
-            if todo.remind_count >= max_times:
-                md += "，之后将标记为逾期"
-        card = build_card(f"⏰ 待办提醒 · {todo.title}", md, "orange",
-                          [reminder_buttons(todo.id),
-                           {"tag": "note", "elements": [{"tag": "plain_text",
-                             "content": "也可以直接回复「完成」或「延后10分钟」"}]}])
+        if todo.repeat_cron:
+            # 周期性提醒：纯通知，无按钮、无需回复确认
+            card = build_card(f"🔁 周期提醒 · {todo.title}", md, "blue")
+        else:
+            if max_times > 1:
+                md += f"\n第 {todo.remind_count}/{max_times} 次提醒"
+                if todo.remind_count >= max_times:
+                    md += "，之后将标记为逾期"
+            card = build_card(f"⏰ 待办提醒 · {todo.title}", md, "orange",
+                              [reminder_buttons(todo.id),
+                               {"tag": "note", "elements": [{"tag": "plain_text",
+                                 "content": "也可以直接回复「完成」或「延后10分钟」"}]}])
         await _send_with_retry(session, todo, card)
 
         todo = await _load_todo(session, todo_id)

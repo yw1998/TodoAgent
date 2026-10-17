@@ -5,17 +5,35 @@
 - 事件订阅 v2.0: header.event_type == card.action.trigger
 """
 
+import asyncio
 import json
 import logging
 from datetime import timedelta
 
-from app.channels.feishu import build_card
+from app.channels.feishu import build_card, feishu_channel
+from app.db.models import MessageLog
 from app.db.session import SessionLocal
 from app.scheduler.reminder import fmt_local, utcnow
 from app.services import todo_service
 from app import state
 
 logger = logging.getLogger("todoagent.card")
+
+
+def _send_reply_async(card: dict, log_text: str) -> None:
+    """按钮操作成功后，向会话补发一条确认消息（不阻塞卡片回调响应）。"""
+    async def _send():
+        try:
+            async with SessionLocal() as session:
+                await feishu_channel.send_card_message(session, card)
+                session.add(MessageLog(direction="out", content=log_text, status="ok"))
+                await session.commit()
+        except Exception:
+            logger.exception("button reply send failed")
+    try:
+        asyncio.get_running_loop().create_task(_send())
+    except RuntimeError:
+        logger.warning("no running loop, skip reply send")
 
 
 def extract_action(payload: dict) -> dict | None:
@@ -60,9 +78,10 @@ async def handle_card_action(payload: dict) -> dict:
                 return _resp(card, "info", "该待办已处理")
             await todo_service.complete_todo(session, todo.id)
             state.clear_if_matches(todo.id)
-            _log(session, f"🔘 点击按钮完成 #{todo.id} {todo.title}")
+            await _log(session, f"🔘 点击按钮完成 #{todo.id} {todo.title}")
             logger.info("button complete todo#%s", todo.id)
             card = build_card(f"✅ 已完成 · {todo.title}", f"**{todo.title}**\n完成时间：{fmt_local(utcnow())}", "green")
+            _send_reply_async(card, f"🔘 按钮反馈：已完成 #{todo.id} {todo.title}")
             return _resp(card, "success", "已标记完成")
 
         if act == "snooze":
@@ -77,16 +96,16 @@ async def handle_card_action(payload: dict) -> dict:
             else:
                 await todo_service.update_todo(session, todo.id, remind_at=new_at)
             state.set_last_reminded(todo.id)
-            _log(session, f"🔘 点击按钮延后 #{todo.id} {todo.title} {minutes}分钟")
+            await _log(session, f"🔘 点击按钮延后 #{todo.id} {todo.title} {minutes}分钟")
             logger.info("button snooze todo#%s +%dmin", todo.id, minutes)
             card = build_card(f"⏰ 已延后 · {todo.title}",
                               f"**{todo.title}**\n将在 {fmt_local(new_at)} 再次提醒", "orange")
+            _send_reply_async(card, f"🔘 按钮反馈：#{todo.id} {todo.title} 延后 {minutes} 分钟")
             return _resp(card, "success", f"已延后 {minutes} 分钟")
 
         return _resp(None, "error", "未知操作")
 
 
-def _log(session, text: str) -> None:
-    from app.db.models import MessageLog
+async def _log(session, text: str) -> None:
     session.add(MessageLog(direction="in", content=text, status="ok"))
-    session.commit()
+    await session.commit()

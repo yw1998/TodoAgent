@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Todo
@@ -120,7 +120,10 @@ async def admin_query(session: AsyncSession, status: str | None = None,
         sq = sq.where(Todo.created_at >= frm)
     if to:
         sq = sq.where(Todo.created_at <= to)
+    total = (await session.execute(
+        select(func.count()).select_from(sq.subquery())
+    )).scalar_one()
     rows = (await session.execute(
         sq.order_by(Todo.next_remind_at).offset((page - 1) * size).limit(size)
     )).scalars().all()
-    return rows
+    return rows, total
