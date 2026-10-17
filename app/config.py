@@ -31,6 +31,7 @@ class EnvSettings(BaseSettings):
 
     worker_concurrency: int = 4
     context_rounds: int = 10
+    log_level: str = "INFO"
 
 
 @lru_cache

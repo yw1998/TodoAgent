@@ -1,6 +1,7 @@
 """AgentService：组装上下文 → LLM tool calling 循环 → 生成回复。"""
 
 import json
+import logging
 import time
 from collections import defaultdict, deque
 
@@ -14,6 +15,7 @@ from app.scheduler.reminder import utcnow
 from app.services import todo_service
 
 MAX_TOOL_ROUNDS = 4
+logger = logging.getLogger("todoagent.agent")
 _contexts: dict[int, deque] = defaultdict(lambda: deque(maxlen=get_env().context_rounds * 2))
 
 
@@ -50,6 +52,8 @@ async def handle_message(session: AsyncSession, user: User, text: str) -> str:
                     result = await handler(session, user, args, source_text=text)
                 else:
                     result = await handler(session, user, args)
+                logger.info("tool %s args=%s -> %s", tc.function.name,
+                            str(args)[:200], str(result)[:200])
                 tool_trace.append({"tool": tc.function.name, "args": args, "result": result})
                 messages.append({"role": "tool", "tool_call_id": tc.id,
                                  "content": json.dumps(result, ensure_ascii=False, default=str)})
@@ -58,6 +62,7 @@ async def handle_message(session: AsyncSession, user: User, text: str) -> str:
         await _log(session, user, "in", text, tool_trace, "error", "max tool rounds exceeded", start)
         return reply
     except Exception as e:
+        logger.exception("agent failed: user=%s text=%r", user.external_id, text[:100])
         reply = f"抱歉，系统处理出错了（{type(e).__name__}），请稍后重试。"
         await _log(session, user, "in", text, tool_trace, "error", str(e)[:500], start)
         return reply

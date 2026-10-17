@@ -1,6 +1,7 @@
 """提醒调度：APScheduler jobstore + 周期性 DB 兜底扫描，乐观锁防重复发送。"""
 
 import asyncio
+import logging
 from datetime import datetime, timedelta, timezone as tz
 from zoneinfo import ZoneInfo
 
@@ -16,6 +17,7 @@ from app.db.models import ReminderLog, Todo
 from app.db.session import SessionLocal
 
 _env = get_env()
+logger = logging.getLogger("todoagent.scheduler")
 _scheduler: AsyncIOScheduler | None = None
 
 
@@ -93,8 +95,10 @@ async def fire_reminder(todo_id: int) -> None:
             .values(remind_count=Todo.remind_count + 1)
         )
         if claimed.rowcount == 0:
+            logger.info("reminder todo#%s claimed by others, skip", todo_id)
             return  # 其他执行者已抢占
         await session.commit()
+        logger.info("firing reminder todo#%s title=%r count=%d", todo_id, todo.title, todo.remind_count + 1)
 
         text = (f"⏰ 提醒：{todo.title}\n"
                 f"时间：{todo.next_remind_at:%Y-%m-%d %H:%M} (UTC)\n"
@@ -122,7 +126,10 @@ async def _send_with_retry(session, todo: Todo, text: str) -> None:
             await session.commit()
             return
         except Exception as e:
+            logger.warning("send reminder todo#%s attempt %d/%d failed: %s",
+                           todo.id, attempt + 1, max_retry + 1, e)
             if attempt == max_retry:
+                logger.error("reminder todo#%s permanently failed: %s", todo.id, e)
                 session.add(ReminderLog(todo_id=todo.id, status="error", error=str(e)[:500]))
                 await session.commit()
                 return

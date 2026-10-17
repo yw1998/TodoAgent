@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -7,6 +8,11 @@ from app.config import get_env
 from app.db.session import init_db
 from app.scheduler import reminder
 from app.web.routes import router as web_router
+
+logging.basicConfig(
+    level=get_env().log_level.upper(),
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
 
 
 @asynccontextmanager
