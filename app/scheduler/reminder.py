@@ -106,8 +106,14 @@ async def fire_reminder(todo_id: int) -> None:
         logger.info("firing reminder todo#%s title=%r count=%d", todo_id, todo.title, todo.remind_count + 1)
 
         from app.channels.feishu import build_card, reminder_buttons
+        from app.services import setting_service
+        cfg = await setting_service.get_settings(session)
+        max_times = int(cfg.get("reminder_max_times", 3) or 3)
+        interval = int(cfg.get("reminder_interval_minutes", 5) or 5)
         md = (f"**{todo.title}**\n"
               f"提醒时间：{fmt_local(todo.next_remind_at)}")
+        if not todo.repeat_cron and max_times > 1:
+            md += f"\n第 {todo.remind_count + 1}/{max_times} 次提醒"
         card = build_card("⏰ 待办提醒", md, "orange",
                           [reminder_buttons(todo.id),
                            {"tag": "note", "elements": [{"tag": "plain_text",
@@ -119,8 +125,18 @@ async def fire_reminder(todo_id: int) -> None:
             todo.next_remind_at = next_cron_time(todo.repeat_cron, utcnow())
             await session.commit()
             schedule_todo_job(todo.id, todo.next_remind_at)
-        else:
+        elif todo.remind_count >= max_times:
+            todo.status = "done"
+            todo.done_at = utcnow()
             await session.commit()
+            cancel_todo_job(todo.id)
+            from app import state as app_state
+            app_state.clear_if_matches(todo.user_id, todo.id)
+            logger.info("todo#%s auto-done after %d reminders (max=%d)", todo.id, todo.remind_count, max_times)
+        else:
+            todo.next_remind_at = utcnow() + timedelta(minutes=interval)
+            await session.commit()
+            schedule_todo_job(todo.id, todo.next_remind_at)
 
 
 async def _send_with_retry(session, todo: Todo, card: dict) -> None:

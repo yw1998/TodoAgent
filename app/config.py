@@ -29,6 +29,9 @@ class EnvSettings(BaseSettings):
     scheduler_tick_seconds: int = 30
     scheduler_max_retry: int = 3
 
+    reminder_max_times: int = 3
+    reminder_interval_minutes: int = 5
+
     worker_concurrency: int = 4
     context_rounds: int = 10
     log_level: str = "INFO"
