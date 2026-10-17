@@ -16,13 +16,13 @@
 </form>
 
 <table>
-  <tr><th>#</th><th>用户</th><th>标题</th><th>下次提醒(UTC)</th><th>周期</th><th>状态</th><th>提醒次数</th><th>操作</th></tr>
+  <tr><th>#</th><th>用户</th><th>标题</th><th>下次提醒</th><th>周期</th><th>状态</th><th>提醒次数</th><th>操作</th></tr>
   {% for t in todos %}
   <tr>
     <td>{{ t.id }}</td>
     <td>{{ t.user_id }}</td>
     <td>{{ t.title }}{% if t.note %}<br><small>{{ t.note }}</small>{% endif %}</td>
-    <td>{{ t.next_remind_at.strftime('%Y-%m-%d %H:%M') }}</td>
+    <td>{{ t.next_remind_at | localtime }}</td>
     <td><code>{{ t.repeat_cron or '-' }}</code></td>
     <td><span class="badge {{ t.status }}">{{ t.status }}</span></td>
     <td>{{ t.remind_count }}</td>

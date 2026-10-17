@@ -1,6 +1,8 @@
 """管理页面（服务端渲染 + 表单），cookie 中存 JWT。"""
 
+from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -8,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import create_token, decode_token
+from app.config import get_env
 from app.db.models import Admin, MessageLog, Todo, User
 from app.db.session import get_session, hash_password, verify_password
 from app.scheduler import reminder
@@ -19,6 +22,26 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 from fastapi.templating import Jinja2Templates
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+
+def localtime(dt: datetime | None) -> str:
+    """naive UTC → 配置时区展示。"""
+    if not dt:
+        return "-"
+    local = dt.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(get_env().scheduler_timezone))
+    return local.strftime("%Y-%m-%d %H:%M")
+
+
+def localmd(dt: datetime | None) -> str:
+    if not dt:
+        return "-"
+    local = dt.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(get_env().scheduler_timezone))
+    return local.strftime("%m-%d %H:%M:%S")
+
+
+templates.env.filters["localtime"] = localtime
+templates.env.filters["localmd"] = localmd
+templates.env.globals["tz_label"] = lambda: get_env().scheduler_timezone
 
 
 async def require_page(request: Request) -> str | None:

@@ -33,6 +33,7 @@
   <a href="/admin/settings" class="{{ 'cur' if request.url.path=='/admin/settings' else '' }}">配置</a>
   <a href="/admin/logs" class="{{ 'cur' if request.url.path=='/admin/logs' else '' }}">日志</a>
   <span class="spacer"></span>
+  <span style="color:#9ca3af;font-size:13px">时区 {{ tz_label() }}</span>
   <a href="/admin/logout">退出</a>
 </nav>
 <main>{% block content %}{% endblock %}</main>
