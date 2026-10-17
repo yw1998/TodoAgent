@@ -39,6 +39,9 @@ def decrypt(value: str) -> str:
         raw = base64.urlsafe_b64decode(value)
         return _fernet_key().decrypt(raw[:12], raw[12:], None).decode()
     except Exception:
+        import logging
+        logging.getLogger("todoagent.settings").error(
+            "secret 解密失败：SECRET_KEY 与保存配置时不一致，该项将回退到环境变量默认值")
         return ""
 
 

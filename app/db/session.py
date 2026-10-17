@@ -1,5 +1,7 @@
 import hashlib
+import logging
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -42,6 +44,35 @@ _MIGRATE_TABLES = {
 }
 
 
+def _carry_notify_target(sync_conn) -> None:
+    """迁移前把 users 表最后一条记录的会话信息转存为通知目标配置。"""
+    row = sync_conn.exec_driver_sql(
+        "SELECT external_id, chat_id FROM users ORDER BY id DESC LIMIT 1").fetchone()
+    if not row:
+        return
+    open_id, chat_id = row[0] or "", row[1] or ""
+
+    def _set(key, val):
+        if not val:
+            return
+        cur = sync_conn.exec_driver_sql(
+            "SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+        if cur is None or not cur[0]:
+            if cur is None:
+                sync_conn.exec_driver_sql(
+                    "INSERT INTO settings (key, value, is_secret, updated_at) VALUES (?, ?, 0, ?)",
+                    (key, val, utcnow_str()))
+            else:
+                sync_conn.exec_driver_sql("UPDATE settings SET value=? WHERE key=?", (val, key))
+
+    _set("feishu_notify_open_id", open_id)
+    _set("feishu_notify_chat_id", chat_id)
+
+
+def utcnow_str() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+
 async def _migrate_drop_users(conn) -> None:
     """单人部署：删除历史 users 表及 user_id 列（重建表搬数据，保留全部记录）。"""
     if conn.engine.dialect.name != "sqlite":
@@ -70,6 +101,8 @@ async def _migrate_drop_users(conn) -> None:
             sync_conn.exec_driver_sql(f"ALTER TABLE {new_name} RENAME TO {table}")
             for ix in Base.metadata.tables[table].indexes:
                 ix.create(sync_conn, checkfirst=True)
+        if "users" in existing and "settings" in existing:
+            _carry_notify_target(sync_conn)
         sync_conn.exec_driver_sql("DROP TABLE IF EXISTS users")
         for (name,) in sync_conn.exec_driver_sql(
                 "SELECT name FROM sqlite_master WHERE type='index'").fetchall():
