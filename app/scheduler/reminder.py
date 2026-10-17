@@ -103,7 +103,11 @@ async def fire_reminder(todo_id: int) -> None:
             logger.info("reminder todo#%s claimed by others, skip", todo_id)
             return  # 其他执行者已抢占
         await session.commit()
-        logger.info("firing reminder todo#%s title=%r count=%d", todo_id, todo.title, todo.remind_count + 1)
+        todo = (await session.execute(
+            select(Todo).options(selectinload(Todo.user)).where(Todo.id == todo_id),
+            execution_options={"populate_existing": True},
+        )).scalar_one()  # 重新加载，拿到自增后的 remind_count
+        logger.info("firing reminder todo#%s title=%r count=%d", todo_id, todo.title, todo.remind_count)
 
         from app.channels.feishu import build_card, reminder_buttons
         from app.services import setting_service
@@ -113,7 +117,7 @@ async def fire_reminder(todo_id: int) -> None:
         md = (f"**{todo.title}**\n"
               f"提醒时间：{fmt_local(todo.next_remind_at)}")
         if not todo.repeat_cron and max_times > 1:
-            md += f"\n第 {todo.remind_count + 1}/{max_times} 次提醒"
+            md += f"\n第 {todo.remind_count}/{max_times} 次提醒"
         card = build_card("⏰ 待办提醒", md, "orange",
                           [reminder_buttons(todo.id),
                            {"tag": "note", "elements": [{"tag": "plain_text",

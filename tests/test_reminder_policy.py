@@ -5,9 +5,14 @@ from app.scheduler.reminder import fire_reminder, utcnow
 from app.services import todo_service, user_service
 
 
+sent_cards: list[dict] = []
+
+
 def _fake_send(monkeypatch):
+    sent_cards.clear()
+
     async def fake(self, session, user, card):
-        return None
+        sent_cards.append(card)
     monkeypatch.setattr(FeishuChannel, "send_card_message", fake)
 
 
@@ -26,9 +31,12 @@ async def test_repeat_reminder_then_auto_done(session, monkeypatch):
     await _fire_at(session, todo)  # 第1次
     assert todo.remind_count == 1 and todo.status == "pending"
     assert todo.next_remind_at > utcnow()  # 间隔 5 分钟后再提醒
+    import json
+    assert "第 1/3 次提醒" in json.dumps(sent_cards[-1], ensure_ascii=False)
 
     await _fire_at(session, todo)  # 第2次
     assert todo.remind_count == 2 and todo.status == "pending"
+    assert "第 2/3 次提醒" in json.dumps(sent_cards[-1], ensure_ascii=False)
 
     await _fire_at(session, todo)  # 第3次 = 最大次数 → 自动完成
     assert todo.remind_count == 3
