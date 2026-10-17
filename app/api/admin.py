@@ -79,7 +79,7 @@ async def patch_todo(todo_id: int, body: TodoPatch, session: AsyncSession = Depe
         todo.note = body.note
     if body.remind_at is not None:
         todo.next_remind_at = body.remind_at
-    if body.status in ("pending", "done", "cancelled"):
+    if body.status in ("pending", "done", "cancelled", "overdue"):
         todo.status = body.status
     await session.commit()
     if todo.status == "pending" and todo.next_remind_at > reminder.utcnow():

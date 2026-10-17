@@ -5,7 +5,7 @@
 <form class="filters" method="get">
   <select name="status">
     <option value="">全部状态</option>
-    {% for s in ['pending','done','cancelled'] %}
+    {% for s in ['pending','overdue','done','cancelled'] %}
     <option value="{{ s }}" {{ 'selected' if f_status==s }}>{{ s }}</option>
     {% endfor %}
   </select>
@@ -33,7 +33,7 @@
     <td><span class="tag {{ t.status }}">{{ t.status }}</span></td>
     <td>{{ t.remind_count }}</td>
     <td>
-      {% if t.status == 'pending' %}
+      {% if t.status in ('pending', 'overdue') %}
       <form method="post" action="/admin/todos/{{ t.id }}/action" style="display:inline">
         <input type="hidden" name="action" value="done">
         <button class="btn btn-sm">完成</button>

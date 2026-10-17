@@ -118,6 +118,8 @@ async def fire_reminder(todo_id: int) -> None:
               f"提醒时间：{fmt_local(todo.next_remind_at)}")
         if not todo.repeat_cron and max_times > 1:
             md += f"\n第 {todo.remind_count}/{max_times} 次提醒"
+            if todo.remind_count >= max_times:
+                md += "，之后将标记为逾期"
         card = build_card("⏰ 待办提醒", md, "orange",
                           [reminder_buttons(todo.id),
                            {"tag": "note", "elements": [{"tag": "plain_text",
@@ -130,13 +132,12 @@ async def fire_reminder(todo_id: int) -> None:
             await session.commit()
             schedule_todo_job(todo.id, todo.next_remind_at)
         elif todo.remind_count >= max_times:
-            todo.status = "done"
-            todo.done_at = utcnow()
+            todo.status = "overdue"
             await session.commit()
             cancel_todo_job(todo.id)
             from app import state as app_state
             app_state.clear_if_matches(todo.user_id, todo.id)
-            logger.info("todo#%s auto-done after %d reminders (max=%d)", todo.id, todo.remind_count, max_times)
+            logger.info("todo#%s overdue after %d reminders (max=%d)", todo.id, todo.remind_count, max_times)
         else:
             todo.next_remind_at = utcnow() + timedelta(minutes=interval)
             await session.commit()

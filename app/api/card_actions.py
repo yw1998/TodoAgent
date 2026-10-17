@@ -59,7 +59,7 @@ async def handle_card_action(payload: dict) -> dict:
             return _resp(None, "error", "待办不存在或不属于你")
 
         if act == "complete":
-            if todo.status != "pending":
+            if todo.status in ("done", "cancelled"):
                 card = build_card("ℹ️ 待办提醒", f"**{todo.title}**\n当前状态：{todo.status}，无需重复操作", "grey")
                 return _resp(card, "info", "该待办已处理")
             await todo_service.complete_todo(session, user, todo.id)
@@ -73,11 +73,15 @@ async def handle_card_action(payload: dict) -> dict:
         if act == "snooze":
             minutes = value.get("minutes", "30")
             minutes = int(minutes) if str(minutes).isdigit() else 30
-            if todo.status != "pending":
+            if todo.status in ("done", "cancelled"):
                 card = build_card("ℹ️ 待办提醒", f"**{todo.title}**\n当前状态：{todo.status}，无法延后", "grey")
                 return _resp(card, "info", "该待办已处理")
             new_at = utcnow() + timedelta(minutes=minutes)
-            await todo_service.update_todo(session, user, todo.id, remind_at=new_at)
+            if todo.status == "overdue":
+                # 逾期后延后：重新激活并重置提醒计数
+                await todo_service.update_todo(session, user, todo.id, remind_at=new_at, status="pending")
+            else:
+                await todo_service.update_todo(session, user, todo.id, remind_at=new_at)
             state.set_last_reminded(user.id, todo.id)
             session.add(_action_log(user.id, f"🔘 点击按钮延后 #{todo.id} {todo.title} {minutes}分钟"))
             await session.commit()

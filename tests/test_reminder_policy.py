@@ -38,9 +38,28 @@ async def test_repeat_reminder_then_auto_done(session, monkeypatch):
     assert todo.remind_count == 2 and todo.status == "pending"
     assert "第 2/3 次提醒" in json.dumps(sent_cards[-1], ensure_ascii=False)
 
-    await _fire_at(session, todo)  # 第3次 = 最大次数 → 自动完成
+    await _fire_at(session, todo)  # 第3次 = 最大次数 → 逾期（不是完成）
     assert todo.remind_count == 3
-    assert todo.status == "done" and todo.done_at is not None
+    assert todo.status == "overdue" and todo.done_at is None
+    assert "标记为逾期" in json.dumps(sent_cards[-1], ensure_ascii=False)
+
+
+async def test_overdue_snooze_reactivates(session, monkeypatch):
+    _fake_send(monkeypatch)
+    user = await user_service.upsert_user(session, "feishu", "ou_od", "O", "oc_1")
+    todo = await todo_service.create_todo(session, user, "逾期测试", utcnow() + timedelta(hours=1))
+    for _ in range(3):
+        await _fire_at(session, todo)
+    assert todo.status == "overdue"
+
+    from app.api.card_actions import handle_card_action
+    resp = await handle_card_action({
+        "header": {"event_type": "card.action.trigger", "token": ""},
+        "event": {"operator": {"open_id": "ou_od"},
+                  "action": {"value": {"act": "snooze", "todo_id": str(todo.id), "minutes": "30"}}}})
+    assert resp["toast"]["type"] == "success"
+    await session.refresh(todo)
+    assert todo.status == "pending" and todo.remind_count == 0
 
 
 async def test_repeat_cron_uses_cron_not_interval(session, monkeypatch):

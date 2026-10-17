@@ -34,7 +34,8 @@ TOOL_SCHEMAS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "status": {"type": "string", "enum": ["pending", "done", "all"]},
+                    "status": {"type": "string", "enum": ["pending", "done", "all"],
+                               "description": "pending 含逾期(overdue)项，返回结果中 status 字段区分"},
                     "from": {"type": "string", "description": "可选 ISO8601 起始时间"},
                     "to": {"type": "string", "description": "可选 ISO8601 结束时间"},
                 },
@@ -55,7 +56,7 @@ TOOL_SCHEMAS = [
                     "repeat_cron": {"type": "string"},
                     "note": {"type": "string"},
                     "status": {"type": "string", "enum": ["pending"],
-                               "description": "传 pending 可把已完成/已取消的待办重新激活（恢复）"},
+                               "description": "传 pending 可把已完成/已取消/逾期的待办重新激活（恢复）"},
                 },
                 "required": ["todo_id"],
             },
@@ -115,7 +116,11 @@ async def h_create(session, user, args: dict, source_text: str = "") -> dict:
 async def h_list(session, user, args: dict) -> dict:
     frm = todo_service.parse_dt(args["from"]) if args.get("from") else None
     to = todo_service.parse_dt(args["to"]) if args.get("to") else None
-    todos = await todo_service.list_todos(session, user, args.get("status", "pending"), frm, to)
+    status = args.get("status", "pending")
+    todos = await todo_service.list_todos(session, user, status, frm, to)
+    if status == "pending":
+        overdue = await todo_service.list_todos(session, user, "overdue", frm, to)
+        todos = todos + overdue
     return {"ok": True, "todos": [
         {"id": t.id, "title": t.title, "remind_at": _fmt(t.next_remind_at),
          "status": t.status, "repeat_cron": t.repeat_cron} for t in todos]}

@@ -54,13 +54,14 @@ async def update_todo(session: AsyncSession, user: User, todo_id: int, **fields)
     todo = await get_user_todo(session, user, todo_id)
     if not todo:
         return None
-    reactivate = fields.get("status") == "pending" and todo.status in ("done", "cancelled")
-    if todo.status != "pending" and not reactivate:
-        return None
-    if reactivate:
+    reactivate = False
+    if todo.status != "pending":
+        if not (fields.get("status") == "pending" or todo.status == "overdue"):
+            return None
         todo.status = "pending"
         todo.done_at = None
         todo.remind_count = 0
+        reactivate = True
     changed_time = False
     if fields.get("title") is not None:
         todo.title = str(fields["title"])[:255]
