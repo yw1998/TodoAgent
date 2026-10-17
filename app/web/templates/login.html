@@ -1,20 +1,30 @@
 <!doctype html>
 <html lang="zh">
-<head><meta charset="utf-8"><title>登录 - TodoAgent</title>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>登录 - TodoAgent</title>
 <style>
- body{font-family:system-ui;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;background:#f5f6f8}
- .box{background:#fff;padding:32px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.1);width:320px}
- input{width:100%;padding:8px;margin:8px 0;border:1px solid #d1d5db;border-radius:6px;box-sizing:border-box}
- button{width:100%;padding:8px;background:#2563eb;color:#fff;border:0;border-radius:6px;cursor:pointer}
- .err{color:#b91c1c;font-size:13px}
+ :root { --accent:#4f46e5; }
+ * { box-sizing:border-box; }
+ body{font-family:ui-sans-serif,system-ui,-apple-system,"PingFang SC",sans-serif;margin:0;display:flex;
+   min-height:100vh;align-items:center;justify-content:center;
+   background:linear-gradient(135deg,#1e1b4b 0%,#312e81 45%,#4f46e5 100%)}
+ .box{background:#fff;padding:36px;border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,.35);width:360px}
+ h3{margin:0 0 4px;font-size:20px} .sub{color:#6b7280;font-size:13px;margin-bottom:22px}
+ input{width:100%;padding:11px 12px;margin:8px 0;border:1px solid #e5e7eb;border-radius:10px;font-size:14px;outline:none}
+ input:focus{border-color:var(--accent);box-shadow:0 0 0 3px #eef2ff}
+ button{width:100%;padding:11px;background:var(--accent);color:#fff;border:0;border-radius:10px;
+   font-size:14px;font-weight:600;cursor:pointer;margin-top:8px}
+ button:hover{background:#4338ca}
+ .err{color:#dc2626;font-size:13px;background:#fee2e2;padding:8px 12px;border-radius:8px;margin-bottom:6px}
 </style></head>
 <body>
 <form class="box" method="post" action="/admin/login">
-  <h3>TodoAgent 管理登录</h3>
+  <h3>TodoAgent</h3>
+  <div class="sub">智能待办机器人 · 管理后台</div>
   {% if error %}<div class="err">{{ error }}</div>{% endif %}
   <input name="username" placeholder="用户名" required>
   <input name="password" type="password" placeholder="密码" required>
-  <button type="submit">登录</button>
+  <button type="submit">登 录</button>
 </form>
 </body>
 </html>

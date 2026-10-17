@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
+<h1 class="page">待办事项</h1>
+
 <form class="filters" method="get">
   <select name="status">
     <option value="">全部状态</option>
@@ -11,17 +13,21 @@
     <option value="">全部用户</option>
     {% for u in users %}<option value="{{ u.id }}" {{ 'selected' if f_user==u.id }}>{{ u.name or u.external_id }}</option>{% endfor %}
   </select>
-  <input name="q" placeholder="标题/备注关键字" value="{{ f_q }}">
-  <button type="submit">筛选</button>
+  <input name="q" placeholder="标题 / 备注关键字" value="{{ f_q }}">
+  <button class="btn" type="submit">筛选</button>
 </form>
 
+<div class="card">
 <table>
+  <thead>
   <tr><th>#</th><th>用户</th><th>标题</th><th>下次提醒</th><th>周期</th><th>状态</th><th>提醒次数</th><th>操作</th></tr>
+  </thead>
+  <tbody>
   {% for t in todos %}
   <tr>
-    <td>{{ t.id }}</td>
+    <td><span class="pill">{{ t.id }}</span></td>
     <td>{{ t.user_id }}</td>
-    <td>{{ t.title }}{% if t.note %}<br><small>{{ t.note }}</small>{% endif %}</td>
+    <td><strong>{{ t.title }}</strong>{% if t.note %}<br><small>{{ t.note }}</small>{% endif %}</td>
     <td>{{ t.next_remind_at | localtime }}</td>
     <td><code>{{ t.repeat_cron or '-' }}</code></td>
     <td><span class="badge {{ t.status }}">{{ t.status }}</span></td>
@@ -29,21 +35,26 @@
     <td>
       {% if t.status == 'pending' %}
       <form method="post" action="/admin/todos/{{ t.id }}/action" style="display:inline">
-        <input type="hidden" name="action" value="done"><button>完成</button>
+        <input type="hidden" name="action" value="done">
+        <button class="btn btn-ghost btn-sm">完成</button>
       </form>
       <form method="post" action="/admin/todos/{{ t.id }}/action" style="display:inline">
-        <input type="hidden" name="action" value="cancel"><button>取消</button>
+        <input type="hidden" name="action" value="cancel">
+        <button class="btn btn-danger btn-sm">取消</button>
       </form>
       {% endif %}
     </td>
   </tr>
   {% else %}
-  <tr><td colspan="8">暂无数据</td></tr>
+  <tr><td colspan="8" style="text-align:center;color:var(--text-2);padding:32px">暂无数据</td></tr>
   {% endfor %}
+  </tbody>
 </table>
-<p>
-  {% if page > 1 %}<a href="?page={{ page-1 }}&status={{ f_status }}&q={{ f_q }}">&laquo; 上一页</a>{% endif %}
-  第 {{ page }} 页
-  {% if todos|length >= 20 %}<a href="?page={{ page+1 }}&status={{ f_status }}&q={{ f_q }}">下一页 &raquo;</a>{% endif %}
-</p>
+</div>
+
+<div class="pager">
+  {% if page > 1 %}<a href="?page={{ page-1 }}&status={{ f_status }}&q={{ f_q }}">&larr; 上一页</a>{% endif %}
+  <span>第 {{ page }} 页</span>
+  {% if todos|length >= 20 %}<a href="?page={{ page+1 }}&status={{ f_status }}&q={{ f_q }}">下一页 &rarr;</a>{% endif %}
+</div>
 {% endblock %}

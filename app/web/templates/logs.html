@@ -1,23 +1,28 @@
 {% extends "base.html" %}
 {% block content %}
+<h1 class="page">消息日志</h1>
+<div class="card">
 <table>
-  <tr><th>#</th><th>时间</th><th>用户</th><th>方向</th><th>内容</th><th>工具调用</th><th>状态</th><th>耗时</th></tr>
+  <thead><tr><th>#</th><th>时间</th><th>用户</th><th>方向</th><th>内容</th><th>工具调用</th><th>状态</th><th>耗时</th></tr></thead>
+  <tbody>
   {% for m in logs %}
   <tr>
-    <td>{{ m.id }}</td>
+    <td><span class="pill">{{ m.id }}</span></td>
     <td>{{ m.created_at | localmd }}</td>
     <td>{{ m.user_id }}</td>
-    <td>{{ m.direction }}</td>
+    <td><code>{{ m.direction }}</code></td>
     <td>{{ m.content[:120] }}{% if m.error %}<br><span class="badge error">{{ m.error[:80] }}</span>{% endif %}</td>
-    <td><small>{% if m.tool_calls %}{{ m.tool_calls | tojson }}{% endif %}</small></td>
-    <td><span class="badge {{ 'done' if m.status=='ok' else 'error' }}">{{ m.status }}</span></td>
-    <td>{{ m.latency_ms }}ms</td>
+    <td><small>{% if m.tool_calls %}<code>{{ m.tool_calls | tojson }}</code>{% endif %}</small></td>
+    <td><span class="badge {{ 'ok' if m.status=='ok' else 'error' }}">{{ m.status }}</span></td>
+    <td><small>{{ m.latency_ms }}ms</small></td>
   </tr>
-  {% else %}<tr><td colspan="8">暂无日志</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="8" style="text-align:center;color:var(--text-2);padding:32px">暂无日志</td></tr>{% endfor %}
+  </tbody>
 </table>
-<p>
-  {% if page > 1 %}<a href="?page={{ page-1 }}">&laquo;</a>{% endif %}
-  第 {{ page }} 页
-  {% if logs|length >= 30 %}<a href="?page={{ page+1 }}">&raquo;</a>{% endif %}
-</p>
+</div>
+<div class="pager">
+  {% if page > 1 %}<a href="?page={{ page-1 }}">&larr; 上一页</a>{% endif %}
+  <span>第 {{ page }} 页</span>
+  {% if logs|length >= 30 %}<a href="?page={{ page+1 }}">下一页 &rarr;</a>{% endif %}
+</div>
 {% endblock %}
