@@ -32,6 +32,17 @@ uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
    订阅事件 `接收消息 im.message.receive_v1`。
 4. 将 Verification Token / Encrypt Key / App ID / App Secret 填入管理页「配置」或 .env。
 
+## 一键更新部署（服务器）
+
+```bash
+./update.sh              # git 同步 → 重建镜像 → compose 重启 → 健康检查
+FORCE=1 ./update.sh      # 代码未变也强制重建
+BRANCH=dev ./update.sh   # 指定分支
+HEALTH_URL=http://127.0.0.1:8010/healthz ./update.sh   # 端口非 8000 时
+```
+
+健康检查失败会打印容器最近日志并以非 0 退出，成功后自动清理旧镜像。
+
 ## 测试
 
 ```bash
