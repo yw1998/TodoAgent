@@ -54,6 +54,8 @@ TOOL_SCHEMAS = [
                     "remind_at": {"type": "string", "description": "带时区 ISO8601"},
                     "repeat_cron": {"type": "string"},
                     "note": {"type": "string"},
+                    "status": {"type": "string", "enum": ["pending"],
+                               "description": "传 pending 可把已完成/已取消的待办重新激活（恢复）"},
                 },
                 "required": ["todo_id"],
             },
@@ -130,19 +132,28 @@ async def h_update(session, user, args: dict) -> dict:
             return {"ok": False, "error": "提醒时间必须晚于当前时间"}
     todo = await todo_service.update_todo(session, user, int(args["todo_id"]), **fields)
     if not todo:
-        return {"ok": False, "error": f"待办 #{args['todo_id']} 不存在、不属于该用户或已完成"}
-    return {"ok": True, "todo_id": todo.id, "title": todo.title, "remind_at": _fmt(todo.next_remind_at)}
+        return {"ok": False, "error": f"待办 #{args['todo_id']} 不存在或不属于该用户"}
+    if fields.get("status") == "pending":
+        from app import state
+        state.clear_if_matches(user.id, todo.id)
+    return {"ok": True, "todo_id": todo.id, "title": todo.title,
+            "status": todo.status, "remind_at": _fmt(todo.next_remind_at)}
 
 
 async def h_complete(session, user, args: dict) -> dict:
     todo = await todo_service.complete_todo(session, user, int(args["todo_id"]))
     if not todo:
         return {"ok": False, "error": f"待办 #{args['todo_id']} 不存在或不属于该用户"}
+    from app import state
+    state.clear_if_matches(user.id, todo.id)
     return {"ok": True, "todo_id": todo.id, "title": todo.title}
 
 
 async def h_delete(session, user, args: dict) -> dict:
     ok = await todo_service.delete_todo(session, user, int(args["todo_id"]))
+    if ok:
+        from app import state
+        state.clear_if_matches(user.id, int(args["todo_id"]))
     return {"ok": ok} if ok else {"ok": False, "error": "待办不存在或不属于该用户"}
 
 
@@ -155,14 +166,21 @@ TOOL_HANDLERS = {
 }
 
 
-def build_system_prompt(now_utc: datetime, pending: list[dict]) -> str:
+def build_system_prompt(now_utc: datetime, pending: list[dict], last_reminded_id: int | None = None) -> str:
     from datetime import timezone
     from zoneinfo import ZoneInfo
     env = get_env()
     local = now_utc.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(env.scheduler_timezone))
     lines = [f"- #{p['id']} {p['title']} (下次提醒 {_fmt(p['remind_at'])})" for p in pending]
+    if last_reminded_id:
+        hit = next((p for p in pending if p["id"] == last_reminded_id), None)
+        title = f" {hit['title']}" if hit else ""
+        lr = f"#{last_reminded_id}{title} —— 30分钟内刚提醒过，裸「完成/延后」指的就是它"
+    else:
+        lr = "(无。用户说「完成/延后」但未指明编号时，必须追问)"
     return SYSTEM_PROMPT.format(
         now=local.strftime("%Y-%m-%d %H:%M"),
         tz=env.scheduler_timezone,
         pending_todos="\n".join(lines) or "(暂无)",
+        last_reminded=lr,
     )

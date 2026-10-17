@@ -7,6 +7,7 @@ from collections import defaultdict, deque
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import state
 from app.agent import tools
 from app.config import get_env
 from app.db.models import MessageLog, User
@@ -23,7 +24,8 @@ async def handle_message(session: AsyncSession, user: User, text: str) -> str:
     pending = await todo_service.list_todos(session, user, "pending")
     pending_summary = [{"id": t.id, "title": t.title, "remind_at": t.next_remind_at} for t in pending[:50]]
     messages = [
-        {"role": "system", "content": tools.build_system_prompt(utcnow(), pending_summary)},
+        {"role": "system", "content": tools.build_system_prompt(
+            utcnow(), pending_summary, state.get_last_reminded(user.id))},
         *_contexts[user.id],
         {"role": "user", "content": text},
     ]

@@ -52,8 +52,15 @@ async def list_todos(session: AsyncSession, user: User, status: str = "pending",
 
 async def update_todo(session: AsyncSession, user: User, todo_id: int, **fields) -> Todo | None:
     todo = await get_user_todo(session, user, todo_id)
-    if not todo or todo.status != "pending":
+    if not todo:
         return None
+    reactivate = fields.get("status") == "pending" and todo.status in ("done", "cancelled")
+    if todo.status != "pending" and not reactivate:
+        return None
+    if reactivate:
+        todo.status = "pending"
+        todo.done_at = None
+        todo.remind_count = 0
     changed_time = False
     if fields.get("title") is not None:
         todo.title = str(fields["title"])[:255]
@@ -66,8 +73,11 @@ async def update_todo(session: AsyncSession, user: User, todo_id: int, **fields)
         todo.repeat_cron = fields["repeat_cron"] or None
         changed_time = True
     await session.commit()
-    if changed_time:
-        reminder.schedule_todo_job(todo.id, todo.next_remind_at)
+    if changed_time or reactivate:
+        if todo.next_remind_at > reminder.utcnow():
+            reminder.schedule_todo_job(todo.id, todo.next_remind_at)
+        else:
+            reminder.cancel_todo_job(todo.id)  # 已过期，交由兜底扫描立即触发
     return todo
 
 

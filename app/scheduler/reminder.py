@@ -107,7 +107,7 @@ async def fire_reminder(todo_id: int) -> None:
 
         md = (f"**{todo.title}**\n"
               f"提醒时间：{fmt_local(todo.next_remind_at)}\n"
-              f"回复「完成 #{todo.id}」标记已完成，回复「延后 #{todo.id} 10分钟」稍后再提醒。")
+              f"回复「完成」标记已完成，回复「延后 10分钟」稍后再提醒，或回复「取消 #{todo.id}」删除该待办。")
         await _send_with_retry(session, todo, md)
 
         todo = await _load_todo(session, todo_id)
@@ -121,12 +121,16 @@ async def fire_reminder(todo_id: int) -> None:
 
 async def _send_with_retry(session, todo: Todo, markdown: str) -> None:
     from app.channels.feishu import feishu_channel
+    from app import state
 
     max_retry = int(_env.scheduler_max_retry)
     delay = 2
     for attempt in range(max_retry + 1):
         try:
             await feishu_channel.send_card(session, todo.user, "⏰ 待办提醒", markdown)
+            state.set_last_reminded(todo.user_id, todo.id)
+            logger.info("reminder sent todo#%s, last_reminded=%d->%d",
+                        todo.id, todo.user_id, todo.id)
             session.add(ReminderLog(todo_id=todo.id, status="ok"))
             await session.commit()
             return
