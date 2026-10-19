@@ -95,7 +95,7 @@ async def save_settings(session: AsyncSession, values: dict[str, str]) -> None:
         else:
             session.add(Setting(key=key, value=stored, is_secret=is_secret))
     await session.commit()
-    invalidate()
+    await load_cache(session)  # 立即重载缓存，使 peek/同步代码即见新值
 
 
 async def get_settings_for_display(session: AsyncSession) -> list[dict]:
@@ -103,9 +103,17 @@ async def get_settings_for_display(session: AsyncSession) -> list[dict]:
     return [
         {
             "key": r.key,
-            "value": "***" if r.is_secret and r.value else "",
+            "value": "" if r.is_secret else r.value,
             "is_secret": r.is_secret,
-            "set": bool(r.value) if r.is_secret else True,
+            "set": bool(r.value),
         }
         for r in rows
     ]
+
+
+def peek(key: str, default: str = "") -> str:
+    """同步读取当前生效配置（DB 缓存优先，回退 env）；供调度器等同步代码使用。"""
+    env_val = str(get_env().model_dump().get(key, ""))
+    if _cache is not None and _cache.get(key):
+        return _cache[key]
+    return env_val or default

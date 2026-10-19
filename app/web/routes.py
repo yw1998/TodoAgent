@@ -126,6 +126,8 @@ async def settings_submit(request: Request, session: AsyncSession = Depends(get_
     form = await request.form()
     values = {k: str(v) for k, v in form.items() if v != "***"}
     await setting_service.save_settings(session, values)
+    from app.scheduler import reminder
+    reminder.apply_runtime()
     return RedirectResponse("/admin/settings?saved=1", status_code=302)
 
 

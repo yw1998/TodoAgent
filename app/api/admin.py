@@ -95,6 +95,7 @@ class SettingsBody(BaseModel):
 @router.put("/settings")
 async def put_settings(body: SettingsBody, session: AsyncSession = Depends(get_session)):
     await setting_service.save_settings(session, body.values)
+    reminder.apply_runtime()
     return {"ok": True}
 
 

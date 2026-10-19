@@ -29,12 +29,15 @@ def _to_aware(dt: datetime) -> datetime:
 
 
 def fmt_local(dt_utc: datetime) -> str:
-    local = _to_aware(dt_utc).astimezone(ZoneInfo(_env.scheduler_timezone))
-    return f"{local:%Y-%m-%d %H:%M} ({_env.scheduler_timezone})"
+    from app.services import setting_service
+    tzn = setting_service.peek("scheduler_timezone", "Asia/Shanghai")
+    local = _to_aware(dt_utc).astimezone(ZoneInfo(tzn))
+    return f"{local:%Y-%m-%d %H:%M} ({tzn})"
 
 
 def next_cron_time(cron: str, base_utc: datetime) -> datetime:
-    tzn = ZoneInfo(_env.scheduler_timezone)
+    from app.services import setting_service
+    tzn = ZoneInfo(setting_service.peek("scheduler_timezone", "Asia/Shanghai"))
     trigger = CronTrigger.from_crontab(cron, timezone=tzn)
     nxt = trigger.get_next_fire_time(None, _to_aware(base_utc).astimezone(tzn))
     return nxt.astimezone(tz.utc).replace(tzinfo=None) if nxt else base_utc + timedelta(days=1)
@@ -150,8 +153,9 @@ async def _load_todo(session, todo_id: int) -> Todo | None:
 async def _send_with_retry(session, todo: Todo, card: dict) -> None:
     from app.channels.feishu import feishu_channel
     from app import state
+    from app.services import setting_service
 
-    max_retry = int(_env.scheduler_max_retry)
+    max_retry = int(setting_service.peek("scheduler_max_retry", "3") or 3)
     delay = 2
     for attempt in range(max_retry + 1):
         try:
@@ -196,11 +200,25 @@ async def restore_jobs() -> None:
             schedule_todo_job(todo.id, todo.next_remind_at)
 
 
+def _tick_seconds() -> int:
+    from app.services import setting_service
+    return int(setting_service.peek("scheduler_tick_seconds", "30") or 30)
+
+
 def start() -> None:
     sched = get_scheduler()
-    sched.add_job(tick, "interval", seconds=int(_env.scheduler_tick_seconds),
+    sched.add_job(tick, "interval", seconds=_tick_seconds(),
                   id="fallback-tick", replace_existing=True)
     sched.start()
+
+
+def apply_runtime() -> None:
+    """配置保存后热应用可调参数。"""
+    if not (_scheduler and _scheduler.running):
+        return
+    _scheduler.add_job(tick, "interval", seconds=_tick_seconds(),
+                       id="fallback-tick", replace_existing=True)
+    logger.info("fallback-tick rescheduled: every %ds", _tick_seconds())
 
 
 def shutdown() -> None:
