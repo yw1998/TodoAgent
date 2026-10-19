@@ -30,7 +30,7 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "list_todos",
-            "description": "查询待办列表",
+            "description": "查询待办列表；返回 todos(按时间窗过滤的一次性事项)与 recurring_todos(周期事项，每天生效)",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -120,9 +120,16 @@ async def h_list(session, args: dict) -> dict:
     todos = await todo_service.list_todos(session, status, frm, to)
     if status == "pending":
         todos = todos + await todo_service.list_todos(session, "overdue", frm, to)
+    recurring = []
+    if status in ("pending", "all"):
+        for t in await todo_service.list_todos(session, "all"):
+            if t.repeat_cron and t.status in ("pending", "overdue"):
+                recurring.append(t)
     return {"ok": True, "todos": [
         {"id": t.id, "title": t.title, "remind_at": _fmt(t.next_remind_at),
-         "status": t.status, "repeat_cron": t.repeat_cron} for t in todos]}
+         "status": t.status, "repeat_cron": t.repeat_cron} for t in todos],
+        "recurring_todos": [
+            {"id": t.id, "title": t.title, "repeat_cron": t.repeat_cron} for t in recurring]}
 
 
 async def h_update(session, args: dict) -> dict:

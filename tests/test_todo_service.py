@@ -35,6 +35,23 @@ async def test_admin_status_patch(session):
     assert out.status == "done" and out.done_at is not None
 
 
+async def test_list_includes_recurring_outside_window(session):
+    from app.agent.tools import h_list
+    from datetime import timezone, timedelta as td
+    tz8 = timezone(td(hours=8))
+    await todo_service.create_todo(session, "喝水", utcnow() + timedelta(hours=1),
+                                   repeat_cron="0 10-21/1 * * *")
+    tomorrow = (utcnow() + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    result = await h_list(session, {
+        "status": "pending",
+        "from": tomorrow.astimezone(tz8).isoformat(),
+        "to": (tomorrow + timedelta(days=1)).astimezone(tz8).isoformat(),
+    })
+    assert result["ok"]
+    assert "喝水" in [t["title"] for t in result["recurring_todos"]]
+    assert "喝水" not in [t["title"] for t in result["todos"]]
+
+
 async def test_last_reminded_state_and_prompt():
     from app import state
     from app.agent.tools import build_system_prompt
