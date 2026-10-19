@@ -29,10 +29,11 @@ def _to_aware(dt: datetime) -> datetime:
 
 
 def fmt_local(dt_utc: datetime) -> str:
+    """展示用：转为配置时区的时间，不显示时区名（服务端统一处理）。"""
     from app.services import setting_service
     tzn = setting_service.peek("scheduler_timezone", "Asia/Shanghai")
     local = _to_aware(dt_utc).astimezone(ZoneInfo(tzn))
-    return f"{local:%Y-%m-%d %H:%M} ({tzn})"
+    return local.strftime("%Y-%m-%d %H:%M")
 
 
 def next_cron_time(cron: str, base_utc: datetime) -> datetime:
