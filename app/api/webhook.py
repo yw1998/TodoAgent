@@ -78,7 +78,9 @@ async def feishu_events(request: Request):
         async with SessionLocal() as session:
             encrypt_key = await setting_service.get_setting(session, "feishu_encrypt_key")
         if not encrypt_key:
-            _reject(400, "payload encrypted but feishu_encrypt_key not configured", keys=list(payload.keys()))
+            from app.config import get_env
+            env_hint = "env 有值但被空配置覆盖?" if get_env().feishu_encrypt_key else "容器内 FEISHU_ENCRYPT_KEY 未设置(检查 .env 后需 --force-recreate)"
+            _reject(400, f"feishu_encrypt_key not configured ({env_hint})", keys=list(payload.keys()))
         from app.channels.feishu import decrypt_event
         try:
             payload = decrypt_event(payload["encrypt"], encrypt_key)

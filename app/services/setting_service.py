@@ -48,7 +48,15 @@ def decrypt(value: str) -> str:
 async def load_cache(session: AsyncSession) -> dict[str, str]:
     global _cache
     rows = (await session.execute(_select_all())).scalars().all()
-    _cache = {r.key: (decrypt(r.value) if r.is_secret else r.value) for r in rows}
+    cache = {}
+    for r in rows:
+        if r.is_secret:
+            val = decrypt(r.value)
+            if val:  # 解密失败(如 SECRET_KEY 变更)时跳过，回退环境变量而非覆盖成空
+                cache[r.key] = val
+        else:
+            cache[r.key] = r.value
+    _cache = cache
     return _cache
 
 
